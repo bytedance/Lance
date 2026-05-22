@@ -215,25 +215,13 @@ We are actively updating and improving this repository. If you find any bugs or 
 
 ### Installation Steps
 
-First, clone the repository:
-
 ```bash
 git clone https://github.com/bytedance-seed/Lance.git
 cd Lance
-```
-
-#### Option 1: Automated Setup
-
-```bash
-bash ./setup_env.sh
-pip install flash-attn==2.8.3 --no-build-isolation
-```
-
-#### Option 2: Manual Setup (Recommended)
-```bash
-conda create -n Lance python=3.11
+conda create -n Lance python=3.11 -y
+conda activate Lance
 pip install torch==2.5.1+cu124 torchvision==0.20.1+cu124 torchaudio==2.5.1+cu124 --index-url https://download.pytorch.org/whl/cu124
-pip install  -r requirements_full.txt
+pip install -r requirements.txt
 pip install flash-attn==2.8.3 --no-build-isolation
 ```
 

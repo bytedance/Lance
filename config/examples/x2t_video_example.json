@@ -1,40 +1,4 @@
 {
-  "0001": {
-    "interleave_array": [
-      "assets/video-understanding/videos/video-understanding-vqa-01.mp4",
-      [
-        "Watch the video carefully and answer the question.",
-        "How many times did the person launch objects on the table? Options: (A) 3 (B) 2 (C) 4",
-        "(A) 3"
-      ]
-    ],
-    "element_dtype_array": [
-      "video",
-      "text"
-    ],
-    "istarget_in_interleave": [
-      0,
-      1
-    ]
-  },
-  "0002": {
-    "interleave_array": [
-      "assets/video-understanding/videos/video-understanding-vqa-02.mp4",
-      [
-        "Watch the video carefully and answer the question.",
-        "The person makes sets of repeated actions. How many distinct repeated actions did the person do? Options: (A) 2 (B) 3 (C) 4",
-        "(A) 2"
-      ]
-    ],
-    "element_dtype_array": [
-      "video",
-      "text"
-    ],
-    "istarget_in_interleave": [
-      0,
-      1
-    ]
-  },
   "0003": {
     "interleave_array": [
       "assets/video-understanding/videos/video-understanding-vqa-03.mp4",
@@ -53,30 +17,12 @@
       1
     ]
   },
-  "0004": {
-    "interleave_array": [
-      "assets/video-understanding/videos/video-understanding-vqa-04.mp4",
-      [
-        "Watch the video carefully and answer the question.",
-        "What is the unrealistic phenomenon displayed in the video? Options: (A) The man can manipulate time via phone. (B) Man grabs an object through a phone screen. (C) Chocolate transforms into different objects. (D) Visible means of propulsion enables flight.",
-        "(B) Man grabs an object through a phone screen."
-      ]
-    ],
-    "element_dtype_array": [
-      "video",
-      "text"
-    ],
-    "istarget_in_interleave": [
-      0,
-      1
-    ]
-  },
   "0005": {
     "interleave_array": [
       "assets/video-understanding/videos/video-understanding-caption-short-01.mp4",
       [
         "Watch the video carefully and answer the question.",
-        "Offer a succinct account of the culinary process shown in this video.",
+        "Offer a account of the culinary process shown in this video.",
         "Add tomato puree and mix it well with chicken pieces."
       ]
     ],
@@ -94,7 +40,7 @@
       "assets/video-understanding/videos/video-understanding-caption-long-01.mp4",
       [
         "Watch the video carefully and answer the question.",
-        "Provide a detailed description of the given video, capturing its key moments.",
+        "Offer a account of the  behavioral process shown in this video.",
         "In a sunlit meadow, a small tortoiseshell butterfly rests on a purple flower. A bee, with black and yellow stripes, lands on the same flower. The butterfly flaps its wings gently, while the bee busies itself, collecting nectar. The flower sways slightly in the breeze. The butterfly then takes off, and the bee follows, both heading to the next flower. The scene is a vivid display of insect interaction in a natural setting, with the colors of the butterfly and the bee contrasting against the green background of the meadow. The video captures this peaceful moment in a short 6-second duration."
       ]
     ],

@@ -344,33 +344,37 @@ def validate_on_fixed_batch(
             clean_memory()
 
         elif inference_args.task in UNDERSTANDING_TASKS:
-            generated_sequence_all, captions, index = fsdp_model.validation_video_to_text(
-                val_packed_text_ids=val_data["packed_text_ids"],
-                val_packed_text_indexes=val_data["packed_text_indexes"],
-                val_packed_position_ids=val_data["packed_position_ids"],
-                val_sample_N_target=val_data["sample_N_target"],
-                val_split_lens=val_data["split_lens"],
-                val_attn_modes=val_data["attn_modes"],
-                val_sample_lens=val_data["sample_lens"],
-                val_sample_type=val_data["sample_type"],
-                val_packed_vit_tokens=val_data["packed_vit_tokens"],
-                val_vit_video_grid_thw=val_data["vit_video_grid_thw"],
-                val_ce_loss_indexes=val_data["ce_loss_indexes"],
-                max_samples=training_args.validation_max_samples,
-                max_length=MAX_GENERATION_LENGTH,
-                device=device,
-                dtype=torch.bfloat16,
-                new_token_ids=new_token_ids,
-                pad_token_id=tokenizer.pad_token_id,
-                vocab_size=len(tokenizer),
-                caption=val_data.get("caption_cn", None),
-                tokenizer=tokenizer,
-                apply_chat_template=training_args.apply_chat_template,
-                apply_qwen_2_5_vl_pos_emb=training_args.apply_qwen_2_5_vl_pos_emb,
-                do_sample=False,
-                image_token_id=image_token_id,
-                index=val_data["index"],
-            )
+            params = {
+                "val_packed_text_ids": val_data["packed_text_ids"],
+                "val_packed_text_indexes": val_data["packed_text_indexes"],
+                "val_packed_position_ids": val_data["packed_position_ids"],
+                "val_sample_N_target": val_data["sample_N_target"],
+                "val_split_lens": val_data["split_lens"],
+                "val_attn_modes": val_data["attn_modes"],
+                "val_sample_lens": val_data["sample_lens"],
+                "val_sample_type": val_data["sample_type"],
+                "val_packed_vit_tokens": val_data["packed_vit_tokens"],
+                "val_vit_video_grid_thw": val_data["vit_video_grid_thw"],
+                "val_ce_loss_indexes": val_data["ce_loss_indexes"],
+                "max_samples": training_args.validation_max_samples,
+                "max_length": MAX_GENERATION_LENGTH,
+                "device": device,
+                "dtype": torch.bfloat16,
+                "new_token_ids": new_token_ids,
+                "pad_token_id": tokenizer.pad_token_id,
+                "vocab_size": len(tokenizer),
+                "caption": val_data.get("caption_cn", None),
+                "tokenizer": tokenizer,
+                "apply_chat_template": training_args.apply_chat_template,
+                "apply_qwen_2_5_vl_pos_emb": training_args.apply_qwen_2_5_vl_pos_emb,
+                "do_sample": False,
+                "image_token_id": image_token_id,
+                "index": val_data["index"],
+            }
+            if inference_args.use_KVcache:
+                generated_sequence_all, captions, index = fsdp_model.validation_und_KVcache(**params)
+            else:
+                generated_sequence_all, captions, index = fsdp_model.validation_video_to_text(**params)
 
             for i_val, generated_sequence in enumerate(generated_sequence_all):
                 cap = tokenizer.decode(generated_sequence[:, 0])
@@ -378,7 +382,7 @@ def validate_on_fixed_batch(
                 inference_args.prompt_data_dict[index] = f"{cap}"
                 del generated_sequence
 
-            del generated_sequence_all, captions
+            del generated_sequence_all, captions, params
             clean_memory()
 
     del val_data

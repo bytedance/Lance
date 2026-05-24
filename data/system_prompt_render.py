@@ -17,7 +17,6 @@ from typing import Any, Dict, List, Tuple
 from jinja2 import Environment, BaseLoader
 
 
-# —— 模板：用显式 \n 控制换行，并用 -%} / {%- 去掉多余空白 ——
 JINJA_PROMPT_TMPL = (
     "<|im_start|>system\n"
     "{{ system_prompt }}<|im_end|>\n"
@@ -37,17 +36,17 @@ VP, IP = "<|video_pad|>", "<|image_pad|>"
 
 def expand_and_index_by_token_ids_new(
     rendered_text: str,
-    tokens: List[int],  # 遇到 VP/IP 的顺序逐个取 K
-    tokenizer,  # HF tokenizer（需含 VP/IP/VE/VS 等special tokens）
-    target_text: str = "",  # 如 "assistant\n"
-    search_text: str = "",  # 如 ""
+    tokens: List[int],
+    tokenizer,
+    target_text: str = "",
+    search_text: str = "",
 ) -> Tuple[str, List[int], List[List[int]], List[int]]:
     """
-    返回:
-      new_rendered_text: 扩展后的文本
-      all_token_id     : new_rendered_text 的 token ids
-      spans_index      : 每个pad块在 all_token_id 中的索引列表（按出现顺序），如 [[100..199], [350..549], ...]
-      tgt_index        : target_text 在 all_token_id 中的索引列表（找不到返回 []）
+    Returns:
+      new_rendered_text: expanded text
+      all_token_id     : token ids of new_rendered_text
+      spans_index      : indexes of each pad block in all_token_id, in occurrence order, e.g. [[100..199], [350..549], ...]
+      tgt_index        : indexes of target_text in all_token_id, or [] if not found
     """
     vs_ids = tokenizer(VS, add_special_tokens=False)["input_ids"]
     ve_ids = tokenizer(VE, add_special_tokens=False)["input_ids"]
@@ -57,14 +56,14 @@ def expand_and_index_by_token_ids_new(
     enc = tokenizer(rendered_text, add_special_tokens=False)
     base_ids = enc["input_ids"]
 
-    # ---------- 1) 扫描并按出现顺序扩展 VP/IP 为 K 次，占位信息入 pad_blocks ----------
+    # ---------- 1) Scan VP/IP in occurrence order and expand each to K copies, recording pad block metadata ----------
     # find all VS positions and pair them with nearest VE after each VS
 
     all_ids: List[int] = []
     spans_index: List[List[int]] = []
 
-    i = 0               # base_ids 扫描指针
-    tk_ptr = 0          # tokens(K) 指针
+    i = 0               # Scan pointer for base_ids.
+    tk_ptr = 0          # Pointer for tokens(K).
 
     while True:
         try:
@@ -75,21 +74,21 @@ def expand_and_index_by_token_ids_new(
         all_ids.extend(base_ids[i: vs_positions_])
         i = vs_positions_ + 3
 
-        # 进行序列扩展，插入占位信息入 pad_ids
+        # Expand the sequence and insert placeholder ids into pad_ids.
         pad_ids = base_ids[vs_positions_ + 1:vs_positions_ + 2]
         K = int(tokens[tk_ptr])
         start, end = len(all_ids) + 1, len(all_ids) + 1 + K
         all_ids.extend(vs_ids + pad_ids * K + ve_ids)
         tk_ptr += 1
 
-        # 获取 每个pad token 在 all_token_id 中的索引列表（按出现顺序），如 [[100..199], [350..549], ...]
+        # Collect indexes of each pad token block in all_token_id, in occurrence order, e.g. [[100..199], [350..549], ...].
         #start, end = vs_positions_ + 1, vs_positions_ + 1 + K
         spans_index.append(list(range(start, end)))
 
     tgt_index: List[int] = []
     if target_text:
         tgt_ids_identify = tokenizer(target_text, add_special_tokens=False)["input_ids"]
-        i = 0               # base_ids 扫描指针
+        i = 0               # Scan pointer for base_ids.
 
         while i < len(all_ids):
             tgt_positions_ = all_ids[i:].index(tgt_ids_identify[0]) + i
@@ -102,7 +101,7 @@ def expand_and_index_by_token_ids_new(
     search_index: List[int] = []
     if search_text:
         search_ids_identify = tokenizer(search_text, add_special_tokens=False)["input_ids"]
-        i = 0               # base_ids 扫描指针
+        i = 0               # Scan pointer for base_ids.
 
         while i < len(all_ids):
             search_positions_ = all_ids[i:].index(search_ids_identify[0]) + i
@@ -148,7 +147,7 @@ def _normalize_messages(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 def render_qwenvl_prompt(
     messages: List[Dict[str, Any]],
     default_system: str = "You are a helpful assistant.",
-    include_assistant_content: bool = False,  # 关键参数：是否渲染 assistant 文本
+    include_assistant_content: bool = False,  # Key option: whether to render assistant text.
     force_video_pad: bool = False,
 ) -> str:
     system_prompt = _extract_system_prompt(messages, default_system)
@@ -173,14 +172,14 @@ def render_qwenvl_prompt(
                     parts.append("<|vision_start|><|video_pad|><|vision_end|>")
             elif t == "video":
                 parts.append("<|vision_start|><|video_pad|><|vision_end|>")
-            # 其他模态可在这里扩展
+            # Other modalities can be added here.
         return "".join(parts)
 
     env = Environment(
         loader=BaseLoader(),
         autoescape=False,
-        trim_blocks=True,  # 去掉块结束后的换行
-        lstrip_blocks=True,  # 去掉块起始前的空白
+        trim_blocks=True,  # Remove newlines after block endings.
+        lstrip_blocks=True,  # Remove whitespace before block starts.
         newline_sequence="\n",
         keep_trailing_newline=False,
     )

@@ -119,6 +119,8 @@
 
 ### 安装步骤
 
+首先，克隆代码仓库：
+
 ```bash
 git clone https://github.com/bytedance/Lance.git
 cd Lance
@@ -129,7 +131,6 @@ cd Lance
 ```bash
 conda create -n Lance python=3.11 -y
 conda activate Lance
-pip install torch==2.5.1+cu124 torchvision==0.20.1+cu124 torchaudio==2.5.1+cu124 --index-url https://download.pytorch.org/whl/cu124
 pip install -r requirements.txt
 pip install flash-attn==2.8.3 --no-build-isolation
 ```
@@ -138,7 +139,7 @@ pip install flash-attn==2.8.3 --no-build-isolation
 >
 > ```bash
 > pip install --no-cache-dir --no-deps --force-reinstall \
-> "https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3%2Bcu12torch2.5cxx11abiFALSE-cp311-cp311-linux_x86_64.whl"
+> "https://huggingface.co/strangertoolshf/flash_attention_2_wheelhouse/resolve/main/wheelhouse-flash_attn-2.8.3/linux_x86_64/torch2.8/cu12/abiTRUE/cp311/flash_attn-2.8.3+cu12torch2.8cxx11abiTRUE-cp311-cp311-linux_x86_64.whl"
 > ```
 
 然后，从 [Hugging Face 上的 Lance-3B](https://huggingface.co/bytedance-research/Lance) 下载所需的全部模型权重，并放置到 `downloads/` 目录下：
@@ -179,67 +180,37 @@ bash inference_lance.sh
 ##### 文生视频
 
 ```bash
-bash inference_lance.sh \
-  --TASK_NAME t2v \
-  --MODEL_PATH downloads/Lance_3B_Video \
-  --RESOLUTION video_480p \
-  --NUM_FRAMES 121 \
-  --VIDEO_HEIGHT 480 \
-  --VIDEO_WIDTH 848 \
-  --SAVE_PATH_GEN results/t2v
+bash inference_lance.sh --TASK_NAME t2v --MODEL_PATH downloads/Lance_3B_Video --RESOLUTION video_480p --NUM_FRAMES 121 --VIDEO_HEIGHT 480 --VIDEO_WIDTH 848 --SAVE_PATH_GEN results/t2v
 ```
 
 ##### 文生图
 
 ```bash
-bash inference_lance.sh \
-  --TASK_NAME t2i \
-  --MODEL_PATH downloads/Lance_3B \
-  --RESOLUTION image_768res \
-  --VIDEO_HEIGHT 768 \
-  --VIDEO_WIDTH 768 \
-  --SAVE_PATH_GEN results/t2i
+bash inference_lance.sh --TASK_NAME t2i --MODEL_PATH downloads/Lance_3B --RESOLUTION image_768res --VIDEO_HEIGHT 768 --VIDEO_WIDTH 768 --SAVE_PATH_GEN results/t2i
 ```
 
 ##### 视频编辑
 
 ```bash
-bash inference_lance.sh \
-  --TASK_NAME video_edit \
-  --MODEL_PATH downloads/Lance_3B_Video \
-  --RESOLUTION video_480p \
-  --SAVE_PATH_GEN results/video_edit
+bash inference_lance.sh --TASK_NAME video_edit --MODEL_PATH downloads/Lance_3B_Video --RESOLUTION video_480p --SAVE_PATH_GEN results/video_edit
 ```
 
 ##### 图像编辑
 
 ```bash
-bash inference_lance.sh \
-  --TASK_NAME image_edit \
-  --MODEL_PATH downloads/Lance_3B \
-  --RESOLUTION image_768res \
-  --SAVE_PATH_GEN results/image_edit
+bash inference_lance.sh --TASK_NAME image_edit --MODEL_PATH downloads/Lance_3B --RESOLUTION image_768res --SAVE_PATH_GEN results/image_edit
 ```
 
 ##### 视频理解
 
 ```bash
-bash inference_lance.sh \
-  --TASK_NAME x2t_video \
-  --MODEL_PATH downloads/Lance_3B_Video \
-  --RESOLUTION video_480p \
-  --NUM_FRAMES 50 \
-  --SAVE_PATH_GEN results/x2t_video
+bash inference_lance.sh --TASK_NAME x2t_video --MODEL_PATH downloads/Lance_3B_Video --RESOLUTION video_480p --NUM_FRAMES 50 --SAVE_PATH_GEN results/x2t_video
 ```
 
 ##### 图像理解
 
 ```bash
-bash inference_lance.sh \
-  --TASK_NAME x2t_image \
-  --MODEL_PATH downloads/Lance_3B \
-  --RESOLUTION image_768res \
-  --SAVE_PATH_GEN results/x2t_image
+bash inference_lance.sh --TASK_NAME x2t_image --MODEL_PATH downloads/Lance_3B --RESOLUTION image_768res --SAVE_PATH_GEN results/x2t_image
 ```
 
 #### 可用任务

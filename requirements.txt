@@ -1,5 +1,8 @@
-absl-py==0.15.0
-accelerate>=0.21.0
+--extra-index-url https://download.pytorch.org/whl/cu126
+torch==2.8.0
+torchvision==0.23.0
+torchaudio==2.8.0
+accelerate>=0.21.0             
 addict==2.4.0
 annotated-types==0.7.0
 bitsandbytes==0.49.2
@@ -27,7 +30,7 @@ numpy==1.23.5
 omegaconf==2.3.0
 opencv-python==4.7.0.72
 opt_einsum==3.4.0
-packaging>=20.8,<26.0
+packaging>=20.8,<26.0         
 peft==0.5.0
 pillow==11.0.0
 protobuf==3.20.3
@@ -61,8 +64,37 @@ urllib3==1.26.20
 webdataset==0.2.48
 yacs==0.1.8
 zipp==3.23.1
-httpx>=0.25.0
+httpx>=0.25.0                  
 gpustat
-transformers==4.49.0
+transformers==4.49.0           
 diffusers==0.29.1
-gradio==5.35
+gradio==5.31.0
+sk-video
+spaces==0.50.2
+
+# Environment repair deps for preinstalled notebook/byted packages.
+# These are not core Lance imports, but pip reports resolver conflicts if
+# those packages already exist in the environment without their dependencies.
+beautifulsoup4>=4.12.0
+traitlets>=5.6.0
+ipython>=7.23.1
+prompt-toolkit>=3.0.30
+jsonschema[format-nongpl]>=4.18.0
+referencing
+tornado>=6.4.1
+matplotlib-inline>=0.1
+websocket-client>=1.7
+docker-pycreds>=0.4.0,<99.0.0
+GitPython>=1.0.0,<99.0.0
+promise>=2.0,<3
+sentry-sdk>=1.0.0,<99.0.0
+setproctitle>=0.0.1,<99.0.0
+shortuuid>=0.5.0,<99.0.0
+colorama>=0.4.6,<1.0.0
+wrapt>=1.10,<2.0
+
+# ByteDance-internal deps required by preinstalled byted-* packages.
+byteddatabus~=1.0.4
+bytedenv>=0.0.1,<99.0.0
+bytedztijwthelper>=0.0.17,<1.0.0
+bytedkafka>=0.2.6,<2.0.0

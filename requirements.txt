@@ -1,7 +1,6 @@
 absl-py==0.15.0
 accelerate>=0.21.0
 addict==2.4.0
-albumentations==1.4.3
 annotated-types==0.7.0
 bitsandbytes==0.49.2
 certifi==2024.8.30

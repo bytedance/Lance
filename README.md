@@ -118,8 +118,6 @@ We are actively updating and improving this repository. If you find any bugs or 
 
 ### Installation Steps
 
-First, clone the repository:
-
 ```bash
 git clone https://github.com/bytedance/Lance.git
 cd Lance

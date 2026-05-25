@@ -121,7 +121,7 @@ We have tested the following dependency combinations on NVIDIA A100:
 - PyTorch 2.8.0 + cu126 + flash-attn 2.8.3
 - PyTorch 2.5.1 + cu124 + flash-attn 2.6.3
 
-The default `requirements.txt` uses the PyTorch 2.8.0 + cu126 setup. For other GPU models, please choose and validate a PyTorch build and a matching `flash-attn` version according to your driver, CUDA runtime, Python version, and GPU architecture.
+The default installation commands use the PyTorch 2.8.0 + cu126 setup. For other GPU models, please choose and validate a PyTorch build and a matching `flash-attn` version according to your driver, CUDA runtime, Python version, and GPU architecture.
 
 ### Installation Steps
 
@@ -137,11 +137,12 @@ Then, set up the environment:
 ```bash
 conda create -n Lance python=3.11 -y
 conda activate Lance
+pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu126
 pip install -r requirements.txt
 pip install flash-attn==2.8.3 --no-build-isolation
 ```
 
-> **Note:** If installing `flash-attn` from source fails, you can install a prebuilt wheel instead. The wheelhouse below is from a third-party repository and is provided for reference only; please verify that any wheel you install matches your Python, PyTorch and CUDA versions.
+> **Note:** If installing `flash-attn` from source fails, you can install a prebuilt wheel instead. The wheelhouse below is from a third-party repository and is provided for **reference only**; please verify that any wheel you install matches your Python, PyTorch and CUDA versions.
 
 > ```bash
 > pip install --no-cache-dir --no-deps --force-reinstall \

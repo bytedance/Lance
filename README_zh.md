@@ -121,7 +121,7 @@
 - PyTorch 2.8.0 + cu126 + flash-attn 2.8.3
 - PyTorch 2.5.1 + cu124 + flash-attn 2.6.3
 
-默认 `requirements.txt` 使用 PyTorch 2.8.0 + cu126 环境。对于其他 GPU 型号，请根据驱动版本、CUDA runtime、Python 版本和 GPU 架构自行选择并验证匹配的 PyTorch 与 `flash-attn` 版本组合。
+默认安装命令使用 PyTorch 2.8.0 + cu126 环境。对于其他 GPU 型号，请根据驱动版本、CUDA runtime、Python 版本和 GPU 架构自行选择并验证匹配的 PyTorch 与 `flash-attn` 版本组合。
 
 
 ### 安装步骤
@@ -138,11 +138,12 @@ cd Lance
 ```bash
 conda create -n Lance python=3.11 -y
 conda activate Lance
+pip install torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu126
 pip install -r requirements.txt
 pip install flash-attn==2.8.3 --no-build-isolation
 ```
 
-> **注意：** 如果从源码安装 `flash-attn` 失败，可以改为安装预编译 wheel。下面的 wheelhouse 来自第三方仓库，仅作为参考提供；请在安装前确认 wheel 与当前 Python、PyTorch 和 CUDA 版本匹配：
+> **注意：** 如果从源码安装 `flash-attn` 失败，可以改为安装预编译 wheel。下面的 wheelhouse 来自第三方仓库，仅作为**参考提供**；请在安装前确认 wheel 与当前 Python、PyTorch 和 CUDA 版本匹配：
 >
 > ```bash
 > pip install --no-cache-dir --no-deps --force-reinstall \

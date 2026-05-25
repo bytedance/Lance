@@ -141,7 +141,7 @@ pip install -r requirements.txt
 pip install flash-attn==2.8.3 --no-build-isolation
 ```
 
-> **Note:** If installing `flash-attn` from source fails, you can install the prebuilt wheel instead. The wheelhouse below is provided by a third-party repository; please make sure the wheel matches your Python, PyTorch, CUDA, and CXX11 ABI versions before installing.
+> **Note:** If installing `flash-attn` from source fails, you can install a prebuilt wheel instead. The wheelhouse below is from a third-party repository and is provided for reference only; please verify that any wheel you install matches your Python, PyTorch and CUDA versions.
 
 > ```bash
 > pip install --no-cache-dir --no-deps --force-reinstall \

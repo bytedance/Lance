@@ -14,19 +14,19 @@
 # coding: utf-8
 
 """
-配置定义与轻量工厂函数。
+Configuration definitions and lightweight factory helpers.
 
-- TemplateArguments  : 对话模板
-- ModelArguments     : 模型结构/加载参数
-- DataArguments      : 验证集输入参数
-- TrainingArguments  : 推理运行期仍会使用的模型加载/采样/兼容字段
-- InferenceArguments : 推理专用参数（继承 TrainingArguments）
-- EvaluationArguments: 评估专用参数（继承 InferenceArguments）
+- TemplateArguments  : chat templates
+- ModelArguments     : model structure and loading parameters
+- DataArguments      : validation dataset input parameters
+- TrainingArguments  : model loading, sampling, and compatibility fields still used at inference time
+- InferenceArguments : inference-only parameters inherited from TrainingArguments
+- EvaluationArguments: evaluation-only parameters inherited from InferenceArguments
 
-当前模块同时负责：
-- 定义训练/推理共用的 dataclass
-- 解析 `path_default.yaml`
-- 为推理链提供轻量配置工厂能力
+This module also handles:
+- shared training/inference dataclass definitions
+- `path_default.yaml` parsing
+- lightweight configuration factory helpers for the inference pipeline
 """
 
 import re
@@ -37,10 +37,10 @@ from typing import List, Dict, Any, Optional
 import yaml
 
 # ==============================================
-# 模型路径配置管理
+# Model path configuration management
 # ==============================================
 
-# 全局缓存，避免重复加载
+# Global cache to avoid repeated loads
 _MODEL_PATH_CONFIG_CACHE: Optional[Dict[str, Any]] = None
 _DEFAULT_PATH_FILE = Path(__file__).with_name("path_default.yaml")
 _PLACEHOLDER_PATTERN = re.compile(r"\$\{([^}]+)\}")
@@ -48,7 +48,7 @@ _PLACEHOLDER_PATTERN = re.compile(r"\$\{([^}]+)\}")
 
 def _get_nested_value(config: Dict[str, Any], path_key: str) -> Any:
     """
-    根据点分路径从嵌套配置中取值，例如 "vit.qwen2_5_vl"。
+    Get a value from a nested config using a dot-separated path, e.g. "vit.qwen2_5_vl".
     """
     value: Any = config
     for key in path_key.split("."):
@@ -61,7 +61,7 @@ def _get_nested_value(config: Dict[str, Any], path_key: str) -> Any:
 
 def _resolve_config_values(value: Any, config: Dict[str, Any]) -> Any:
     """
-    递归解析配置中的占位符，保持原有的嵌套结构不变。
+    Recursively resolve placeholders in the config while preserving the original nested structure.
     """
     if isinstance(value, dict):
         return {k: _resolve_config_values(v, config) for k, v in value.items()}
@@ -72,7 +72,7 @@ def _resolve_config_values(value: Any, config: Dict[str, Any]) -> Any:
 
 def _resolve_placeholders(path: str, config: Dict[str, Any]) -> str:
     """
-    递归解析路径中的占位符，例如 ${base_dir} 或 ${vit.qwen2_5_vl}
+    Recursively resolve placeholders in a path, e.g. ${base_dir} or ${vit.qwen2_5_vl}.
     """
     matches = _PLACEHOLDER_PATTERN.findall(path)
     
@@ -86,7 +86,7 @@ def _resolve_placeholders(path: str, config: Dict[str, Any]) -> str:
         except ValueError as exc:
             raise ValueError(f"Placeholder ${match} not found in {_DEFAULT_PATH_FILE.name}") from exc
 
-        # 递归解析值中的占位符
+        # Recursively resolve placeholders in the value.
         resolved_value = _resolve_placeholders(str(value), config)
         result = result.replace(f"${{{match}}}", resolved_value)
 
@@ -95,9 +95,9 @@ def _resolve_placeholders(path: str, config: Dict[str, Any]) -> str:
 
 def get_model_path_config(reload: bool = False) -> Dict[str, Any]:
     """
-    加载并解析 path_default.yaml 配置文件
-    :param reload: 强制重新加载，忽略缓存
-    :return: 解析后的配置字典
+    Load and resolve the path_default.yaml configuration file.
+    :param reload: Force reload and ignore the cache.
+    :return: Resolved configuration dictionary.
     """
     global _MODEL_PATH_CONFIG_CACHE
     
@@ -120,9 +120,9 @@ def get_model_path_config(reload: bool = False) -> Dict[str, Any]:
 
 def get_model_path(path_key: str) -> str:
     """
-    获取指定的路径值
-    :param path_key: 路径键，支持嵌套，例如 "vit.qwen2_5_vl", "data.t2i"
-    :return: 解析后的完整路径
+    Get a configured path value.
+    :param path_key: Path key with nested keys supported, e.g. "vit.qwen2_5_vl", "data.t2i".
+    :return: Resolved full path.
     """
     config = get_model_path_config()
     value = _get_nested_value(config, path_key)
@@ -134,10 +134,10 @@ class TemplateArguments:
     chat_template: List[str] = (
         '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\n',
         'Describe this image.<|im_end|>\n<|im_start|>assistant\n',
-    )  # NOTE: instruction 需要考虑适配不同数据类型；模板中间插入 VIT token，最后插入 text token
+    )  # NOTE: the instruction should adapt to different data types; insert VIT tokens in the middle and text tokens at the end.
     chat_template_T2I: List[str] = (
         '<|im_start|>system\nDescribe the image by detailing the color, quantity, text, shape, size, texture, spatial relationships of the objects and background:<|im_end|>\n<|im_start|>user\n<|quad_start|><|im_end|>\n<|im_start|>assistant\n',
-    )  # NOTE: 模板中间插入 text token，最后插入 VAE token
+    )  # NOTE: insert text tokens in the middle of the template and VAE tokens at the end.
     pad_token_template_T2I: str = "<|quad_start|>"
     pad_token_template: str = "<|quad_end|>"
 
@@ -182,9 +182,9 @@ class DataArguments:
 
 @dataclass
 class TrainingArguments:
-    # 推理运行期开关
-    apply_chat_template:        bool = False  # 是否对输入文本套用 Qwen2.5-VL chat template
-    apply_qwen_2_5_vl_pos_emb:  bool = False  # 是否启用 Qwen2.5-VL position embedding
+    # Inference runtime switches
+    apply_chat_template:        bool = False  # Whether to apply the Qwen2.5-VL chat template to input text.
+    apply_qwen_2_5_vl_pos_emb:  bool = False  # Whether to enable Qwen2.5-VL position embeddings.
 
     vae_model_type:             str = "seedance"
     visual_gen:                 bool = True
@@ -199,7 +199,7 @@ class TrainingArguments:
 
     global_seed:                int = 2025
 
-    # 采样相关
+    # Sampling settings
     timestep_shift:             float = 1.0
     validation_data_seed:       int = 42
     validation_num_timesteps:   int = 30
@@ -209,29 +209,24 @@ class TrainingArguments:
     validation_video_saving_fps:int = 12
     validation_log_type:        str = "direct"
 
-    # CFG 与文本条件控制
-    cfg_type:                   int = 0       # 0: 完全去除文本条件; 1: 仅保留特殊 token; 2: 保留特殊 token + 中间文本 token 替换为 <NULL>
-    cfg_uncond_token_id:        int = 151643  # 仅在 cfg_type=2 时生效
+    # CFG and text condition control
+    cfg_type:                   int = 0       # 0: remove all text conditions; 1: keep only special tokens; 2: keep special tokens and replace middle text tokens with <NULL>.
+    cfg_uncond_token_id:        int = 151643  # Only used when cfg_type=2.
     cfg_interval:               List[float] = field(default_factory=lambda: [0.4, 1.0])
     cfg_renorm_min:             float = 0
     cfg_renorm_type:            str = "global"  # global | channel | ""
 
-    # 额外 embedding 开关
-    use_task_embedding:         bool = False
-    use_modality_embedding:     bool = False
-
-
 @dataclass
 class InferenceArguments(TrainingArguments):
-    save_path_gen:              str = "tmp/results/inference/generation"  # 生成视频/图像保存路径
-    save_path_gt:               str = ""    # ground truth 视频/图像保存路径，默认不保存
+    save_path_gen:              str = "tmp/results/inference/generation"  # Save path for generated videos/images.
+    save_path_gt:               str = ""    # Save path for ground-truth videos/images; not saved by default.
     video_height:               int = 480
     video_width:                int = 480
     num_frames:                 int = 50
     task:                       str = "t2v"  # t2v / t2i / edit / idip ...
-    resolution:                 str = "video_360p"  # image_256res, image_512res, video_192p, video_360p 等
-    text_template:              bool = False  # 是否使用 system_prompt 文本模板
-    max_duration:               float = 6.0  # 最大视频时长（秒）
+    resolution:                 str = "video_360p"  # image_256res, image_512res, video_192p, video_360p, etc.
+    text_template:              bool = False  # Whether to use the system_prompt text template.
+    max_duration:               float = 6.0  # Maximum video duration in seconds.
 
     system_prompt_type:         str = "SP0"  # options: SP1, SP2 ...
     use_KVcache:                bool = False
@@ -239,9 +234,9 @@ class InferenceArguments(TrainingArguments):
 
 @dataclass
 class EvaluationArguments(InferenceArguments):
-    config_json_path:           str = field(default="", metadata={"help": "配置 JSON 文件路径"})  # 提供 config 则用其覆盖参数
-    sample_num_per_prompt:      int = field(default=4, metadata={"help": "每个 case 的采样数量"})
-    max_eval_cases:             int = field(default=0, metadata={"help": "限制评测 case 数量，0 表示全量"})
-    do_sample:                  bool = False  # UND 任务是否使用采样策略
+    config_json_path:           str = field(default="", metadata={"help": "Path to the JSON config file."})  # Override arguments with this config when provided.
+    sample_num_per_prompt:      int = field(default=4, metadata={"help": "Number of samples per case."})
+    max_eval_cases:             int = field(default=0, metadata={"help": "Limit the number of evaluation cases; 0 means all cases."})
+    do_sample:                  bool = False  # Whether UND tasks use sampling.
     evaluation_seed:            int = 42
-    quick_debug:                bool = False  # 快速调试模式
+    quick_debug:                bool = False  # Quick debug mode.

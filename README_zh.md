@@ -142,7 +142,7 @@ pip install -r requirements.txt
 pip install flash-attn==2.8.3 --no-build-isolation
 ```
 
-> **注意：** 如果从源码安装 `flash-attn` 失败，可以改为安装预编译 wheel：
+> **注意：** 如果从源码安装 `flash-attn` 失败，可以改为安装预编译 wheel。下面的 wheelhouse 来自第三方仓库；安装前请确认该 wheel 与当前 Python、PyTorch、CUDA 和 CXX11 ABI 版本匹配：
 >
 > ```bash
 > pip install --no-cache-dir --no-deps --force-reinstall \

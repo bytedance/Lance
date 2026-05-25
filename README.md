@@ -187,37 +187,67 @@ bash inference_lance.sh
 ##### Text-to-Video
 
 ```bash
-bash inference_lance.sh --TASK_NAME t2v --MODEL_PATH downloads/Lance_3B_Video --RESOLUTION video_480p --NUM_FRAMES 121 --VIDEO_HEIGHT 480 --VIDEO_WIDTH 848 --SAVE_PATH_GEN results/t2v
+bash inference_lance.sh \
+  --TASK_NAME t2v \
+  --MODEL_PATH downloads/Lance_3B_Video \
+  --RESOLUTION video_480p \
+  --NUM_FRAMES 121 \
+  --VIDEO_HEIGHT 480 \
+  --VIDEO_WIDTH 848 \
+  --SAVE_PATH_GEN results/t2v
 ```
 
 ##### Text-to-Image
 
 ```bash
-bash inference_lance.sh --TASK_NAME t2i --MODEL_PATH downloads/Lance_3B --RESOLUTION image_768res --VIDEO_HEIGHT 768 --VIDEO_WIDTH 768 --SAVE_PATH_GEN results/t2i
+bash inference_lance.sh \
+  --TASK_NAME t2i \
+  --MODEL_PATH downloads/Lance_3B \
+  --RESOLUTION image_768res \
+  --VIDEO_HEIGHT 768 \
+  --VIDEO_WIDTH 768 \
+  --SAVE_PATH_GEN results/t2i
 ```
 
 ##### Video Editing
 
 ```bash
-bash inference_lance.sh --TASK_NAME video_edit --MODEL_PATH downloads/Lance_3B_Video --RESOLUTION video_480p --SAVE_PATH_GEN results/video_edit
+bash inference_lance.sh \
+  --TASK_NAME video_edit \
+  --MODEL_PATH downloads/Lance_3B_Video \
+  --RESOLUTION video_480p \
+  --SAVE_PATH_GEN results/video_edit
 ```
 
 ##### Image Editing
 
 ```bash
-bash inference_lance.sh --TASK_NAME image_edit --MODEL_PATH downloads/Lance_3B --RESOLUTION image_768res --SAVE_PATH_GEN results/image_edit
+bash inference_lance.sh \
+  --TASK_NAME image_edit \
+  --MODEL_PATH downloads/Lance_3B \
+  --RESOLUTION image_768res \
+  --SAVE_PATH_GEN results/image_edit
 ```
 
 ##### Video Understanding
 
 ```bash
-bash inference_lance.sh --TASK_NAME x2t_video --MODEL_PATH downloads/Lance_3B_Video --RESOLUTION video_480p --NUM_FRAMES 50 --SAVE_PATH_GEN results/x2t_video
+bash inference_lance.sh \
+  --TASK_NAME x2t_video \
+  --MODEL_PATH downloads/Lance_3B_Video \
+  --RESOLUTION video_480p \
+  --NUM_FRAMES 50 \
+  --SAVE_PATH_GEN results/x2t_video
 ```
 
 ##### Image Understanding
 
 ```bash
-bash inference_lance.sh --TASK_NAME x2t_image --MODEL_PATH downloads/Lance_3B --RESOLUTION image_768res --SAVE_PATH_GEN results/x2t_image
+bash inference_lance.sh \
+  --TASK_NAME x2t_image \
+  --MODEL_PATH downloads/Lance_3B \
+  --RESOLUTION image_768res \
+  --SAVE_PATH_GEN results/x2t_image
 ```
 
 #### Available Tasks

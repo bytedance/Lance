@@ -187,37 +187,67 @@ bash inference_lance.sh
 ##### 文生视频
 
 ```bash
-bash inference_lance.sh --TASK_NAME t2v --MODEL_PATH downloads/Lance_3B_Video --RESOLUTION video_480p --NUM_FRAMES 121 --VIDEO_HEIGHT 480 --VIDEO_WIDTH 848 --SAVE_PATH_GEN results/t2v
+bash inference_lance.sh \
+  --TASK_NAME t2v \
+  --MODEL_PATH downloads/Lance_3B_Video \
+  --RESOLUTION video_480p \
+  --NUM_FRAMES 121 \
+  --VIDEO_HEIGHT 480 \
+  --VIDEO_WIDTH 848 \
+  --SAVE_PATH_GEN results/t2v
 ```
 
 ##### 文生图
 
 ```bash
-bash inference_lance.sh --TASK_NAME t2i --MODEL_PATH downloads/Lance_3B --RESOLUTION image_768res --VIDEO_HEIGHT 768 --VIDEO_WIDTH 768 --SAVE_PATH_GEN results/t2i
+bash inference_lance.sh \
+  --TASK_NAME t2i \
+  --MODEL_PATH downloads/Lance_3B \
+  --RESOLUTION image_768res \
+  --VIDEO_HEIGHT 768 \
+  --VIDEO_WIDTH 768 \
+  --SAVE_PATH_GEN results/t2i
 ```
 
 ##### 视频编辑
 
 ```bash
-bash inference_lance.sh --TASK_NAME video_edit --MODEL_PATH downloads/Lance_3B_Video --RESOLUTION video_480p --SAVE_PATH_GEN results/video_edit
+bash inference_lance.sh \
+  --TASK_NAME video_edit \
+  --MODEL_PATH downloads/Lance_3B_Video \
+  --RESOLUTION video_480p \
+  --SAVE_PATH_GEN results/video_edit
 ```
 
 ##### 图像编辑
 
 ```bash
-bash inference_lance.sh --TASK_NAME image_edit --MODEL_PATH downloads/Lance_3B --RESOLUTION image_768res --SAVE_PATH_GEN results/image_edit
+bash inference_lance.sh \
+  --TASK_NAME image_edit \
+  --MODEL_PATH downloads/Lance_3B \
+  --RESOLUTION image_768res \
+  --SAVE_PATH_GEN results/image_edit
 ```
 
 ##### 视频理解
 
 ```bash
-bash inference_lance.sh --TASK_NAME x2t_video --MODEL_PATH downloads/Lance_3B_Video --RESOLUTION video_480p --NUM_FRAMES 50 --SAVE_PATH_GEN results/x2t_video
+bash inference_lance.sh \
+  --TASK_NAME x2t_video \
+  --MODEL_PATH downloads/Lance_3B_Video \
+  --RESOLUTION video_480p \
+  --NUM_FRAMES 50 \
+  --SAVE_PATH_GEN results/x2t_video
 ```
 
 ##### 图像理解
 
 ```bash
-bash inference_lance.sh --TASK_NAME x2t_image --MODEL_PATH downloads/Lance_3B --RESOLUTION image_768res --SAVE_PATH_GEN results/x2t_image
+bash inference_lance.sh \
+  --TASK_NAME x2t_image \
+  --MODEL_PATH downloads/Lance_3B \
+  --RESOLUTION image_768res \
+  --SAVE_PATH_GEN results/x2t_image
 ```
 
 #### 可用任务

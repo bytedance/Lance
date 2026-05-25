@@ -65,7 +65,7 @@ class LanceConfig(PretrainedConfig):
         self.vit_config = vit_config
         self.vae_config = vae_config
         self.latent_patch_size = latent_patch_size
-        self.max_num_frames = kwargs.get("max_num_frames", 25) 
+        self.max_num_frames = kwargs.get("max_num_frames", 25)
         self.max_latent_size = max_latent_size
         self.vit_max_num_patch_per_side = vit_max_num_patch_per_side
         self.connector_act = connector_act
@@ -108,7 +108,7 @@ class Lance(PreTrainedModel):
 
             self.latent_pos_embed = PositionEmbedding3D(self.max_num_latent_frames, self.max_latent_size, self.hidden_size)
 
-            safety = 1024 
+            safety = 1024
             self.pos_shift = self.max_latent_size * self.max_latent_size * self.max_num_latent_frames + safety
 
         if config.visual_und:
@@ -132,10 +132,10 @@ class Lance(PreTrainedModel):
             self.get_flattened_position_ids = get_flattened_position_ids_extrapolate
 
         self.config = config
-        self.training_args: TrainingArguments = kwargs.get("training_args") 
+        self.training_args: TrainingArguments = kwargs.get("training_args")
 
     def update_tokenizer(self, tokenizer):
-        self.tokenizer: Qwen2Tokenizer = tokenizer 
+        self.tokenizer: Qwen2Tokenizer = tokenizer
         self.vocab_size_efficient = len(tokenizer)
 
     def process_attention_mask(self, current_attn_modes, current_split_lens, current_seq_len, device, BLOCK_SIZE=128):
@@ -176,7 +176,6 @@ class Lance(PreTrainedModel):
         packed_timesteps: Optional[torch.LongTensor] = None,
         mse_loss_indexes: Optional[torch.BoolTensor] = None,
         vit_data_mode: Optional[List[str]] = None, # Indicates whether each VIT split is online or offline.
-        key_frame_mask: Optional[torch.BoolTensor] = None,
         sample_task: Optional[torch.LongTensor] = None,
         sample_modality: Optional[torch.LongTensor] = None,
         BLOCK_SIZE: int = 128,
@@ -214,7 +213,7 @@ class Lance(PreTrainedModel):
         if apply_qwen_2_5_vl_pos_emb:  # TODO :
 
             packed_position_ids = []
-            sample_lens_tensor = torch.tensor(sample_lens, device=device, dtype=torch.long)  
+            sample_lens_tensor = torch.tensor(sample_lens, device=device, dtype=torch.long)
             cu_sample_lens = torch.cat([torch.zeros(1, device=device, dtype=torch.long), sample_lens_tensor.cumsum(0)[:-1]])
             for i_sample in range(len(sample_lens) - 1):
                 text_ids = packed_text_ids[cu_sample_lens[i_sample] : cu_sample_lens[i_sample + 1]]
@@ -226,23 +225,23 @@ class Lance(PreTrainedModel):
 
                 current_packed_position_ids, rope_deltas = self.language_model.get_rope_index(
                     input_ids=text_ids.unsqueeze(0),
-                    image_grid_thw=grid_thw_rope, 
-                    video_grid_thw=grid_thw_rope,  
-                    second_per_grid_ts=[1.0]*len(grid_thw_rope), 
-                    attention_mask=torch.ones([1, len(text_ids)], dtype=torch.long, device=device), 
+                    image_grid_thw=grid_thw_rope,
+                    video_grid_thw=grid_thw_rope,
+                    second_per_grid_ts=[1.0]*len(grid_thw_rope),
+                    attention_mask=torch.ones([1, len(text_ids)], dtype=torch.long, device=device),
                 )
                 current_packed_position_ids = shift_position_ids(current_packed_position_ids, pos_shift = 1000, attn_modes = attn_modes[left:right], split_lens = split_lens[left:right], shift_attn_mode=['full_noise',"full"], pro_type = 10, i_sample_task=i_sample_task, i_sample_modality=i_sample_modality)
                 packed_position_ids.append(current_packed_position_ids)
-            packed_position_ids = torch.cat(packed_position_ids, dim=-1)  
+            packed_position_ids = torch.cat(packed_position_ids, dim=-1)
 
         packed_text_embedding = self.language_model.model.embed_tokens(packed_text_ids)
-        packed_sequence = packed_text_embedding.new_zeros(size=(sequence_length, self.hidden_size)) 
+        packed_sequence = packed_text_embedding.new_zeros(size=(sequence_length, self.hidden_size))
         packed_sequence[packed_text_indexes] = packed_text_embedding[packed_text_indexes]
 
         if nested_attention_masks is None:
             attn_modes_ = ["full" if mode=="full_noise" else mode for mode in attn_modes]
             sparse_mask = create_sparse_mask(sample_lens, split_lens, attn_modes_, packed_text_embedding.device)
-            seqlen = sum(sample_lens) 
+            seqlen = sum(sample_lens)
             attention_mask = create_block_mask(sparse_mask, B=1, H=self.num_heads, Q_LEN=seqlen, KV_LEN=seqlen, device=packed_text_embedding.device, BLOCK_SIZE=BLOCK_SIZE, _compile=True)
         else:
             attention_mask = nested_attention_masks
@@ -252,28 +251,28 @@ class Lance(PreTrainedModel):
                 with torch.no_grad():
                     packed_vit_token_embed = make_packed_vit_token_embed(packed_vit_tokens, vit_data_mode, vit_video_grid_thw, self.vit_model)
                 if self.vit_type == "qwen2_5_vl":
-                    packed_vit_token_embed = self.connector(packed_vit_token_embed) 
-                packed_sequence[packed_vit_token_indexes] = packed_vit_token_embed  
+                    packed_vit_token_embed = self.connector(packed_vit_token_embed)
+                packed_sequence[packed_vit_token_indexes] = packed_vit_token_embed
 
         # flow matching loss
         if self.config.visual_gen:
-            pt, ph, pw = self.latent_patch_size  
+            pt, ph, pw = self.latent_patch_size
             packed_latent = []
             for latent, (t, h, w) in zip(padded_latent, patchified_vae_latent_shapes):
                 patches = rearrange(latent, "(t pt) (h ph) (w pw) c -> (t h w) (pt ph pw c)", t=t, pt=pt, h=h, ph=ph, w=w, pw=pw)
                 packed_latent.append(patches)
-            packed_latent_clean = torch.cat(packed_latent, dim=0)  
+            packed_latent_clean = torch.cat(packed_latent, dim=0)
 
             noise = torch.randn_like(packed_latent_clean)
             if getattr(self.training_args, "incre_time_pro", 0) <=0:
-                packed_timesteps = torch.sigmoid(packed_timesteps) 
+                packed_timesteps = torch.sigmoid(packed_timesteps)
             packed_timesteps = self.timestep_shift * packed_timesteps / (1 + (self.timestep_shift - 1) * packed_timesteps)
             packed_latent = (1 - packed_timesteps[:, None]) * packed_latent_clean + packed_timesteps[:, None] * noise
-            packed_timestep_embeds = self.time_embedder(packed_timesteps) 
+            packed_timestep_embeds = self.time_embedder(packed_timesteps)
             latent_token_pos_emb = self.latent_pos_embed(packed_latent_position_ids)
             packed_latent = self.vae2llm(packed_latent) + packed_timestep_embeds + latent_token_pos_emb
 
-            packed_sequence[packed_vae_token_indexes] = packed_latent.to(packed_sequence.dtype) 
+            packed_sequence[packed_vae_token_indexes] = packed_latent.to(packed_sequence.dtype)
         extra_inputs = {}
         if self.use_moe:
             packed_und_token_indexes = packed_text_indexes
@@ -296,17 +295,17 @@ class Lance(PreTrainedModel):
         if self.config.visual_gen:
             packed_mse_preds = self.llm2vae(last_hidden_state[mse_loss_indexes])
             total_mse_tokens = packed_mse_preds.shape[0]
-            target = noise - packed_latent_clean  
+            target = noise - packed_latent_clean
             has_mse = packed_timesteps > 0
             mse = (packed_mse_preds - target[has_mse]) ** 2
 
         ce = None
         if ce_loss_indexes is not None:
-            V_eff = self.vocab_size_efficient        
+            V_eff = self.vocab_size_efficient
             ignore_index = -100
 
-            h = last_hidden_state[ce_loss_indexes]      
-            logits = self.language_model.lm_head(h)[..., :V_eff]   
+            h = last_hidden_state[ce_loss_indexes]
+            logits = self.language_model.lm_head(h)[..., :V_eff]
 
             targets = packed_label_ids.to(dtype=torch.long)
             invalid = (targets >= V_eff) | (targets < 0)
@@ -327,7 +326,7 @@ class Lance(PreTrainedModel):
         val_split_lens: List[int] = None,
         val_attn_modes: List[str] = None,
         val_sample_N_target: List[int] = None,
-        vit_video_grid_thw: Optional[torch.IntTensor] = None,  
+        vit_video_grid_thw: Optional[torch.IntTensor] = None,
         vae_video_grid_thw: Optional[torch.IntTensor] = None,
         video_grid_thw: Optional[torch.IntTensor] = None,
         val_mse_loss_indexes: Optional[torch.BoolTensor] = None,
@@ -366,7 +365,7 @@ class Lance(PreTrainedModel):
         sample_splits = map_splits_to_samples(val_sample_lens, val_split_lens)
 
         if val_packed_vit_tokens is not None and vit_video_grid_thw is not None:
-            vit_sample_len = vit_video_grid_thw[:, 0] * vit_video_grid_thw[:, 1] * vit_video_grid_thw[:, 2]  
+            vit_sample_len = vit_video_grid_thw[:, 0] * vit_video_grid_thw[:, 1] * vit_video_grid_thw[:, 2]
             cu_vit_sample_lens = torch.cat([torch.zeros(1, device=vit_video_grid_thw.device, dtype=vit_sample_len.dtype), vit_sample_len.cumsum(0)])
             self.vit_model = self.vit_model.to(device=device, dtype=dtype)
 
@@ -378,7 +377,7 @@ class Lance(PreTrainedModel):
         max_samples = min(num_samples, max_samples)
 
         gen_idx = 0
-        curr_vae_split_idx, curr_vit_split_idx = 0, 0  
+        curr_vae_split_idx, curr_vit_split_idx = 0, 0
 
         padded_videos = []
         for i_sample in range(num_samples):
@@ -393,7 +392,7 @@ class Lance(PreTrainedModel):
                 break
 
             if N_noise_element<=0:
-                curr_vit_split_idx += N_vit_split  
+                curr_vit_split_idx += N_vit_split
                 continue
 
             if gen_idx >= max_samples:
@@ -415,7 +414,7 @@ class Lance(PreTrainedModel):
             current_vae_mse_indexes_local = val_mse_loss_indexes[vae_mse_mask] - sample_start_idx  # Indices of x_t positions that need updates.
             current_vae_mse_indexes_local_in_vae = (
                 current_vae_mse_indexes_local - current_vae_mse_indexes_local[0] + torch.where(current_vae_token_indexes_local == current_vae_mse_indexes_local[0])[0]
-            )  
+            )
 
             num_vid_tokens_list, vid_shape_list, vae_position_ids, curr_padded_latent = [], [], [], []
 
@@ -426,7 +425,7 @@ class Lance(PreTrainedModel):
                 cfg_vit_pro = True
 
             for i_target in range(N_noise_element):
-                T, H, W = video_sizes[curr_vae_split_idx]  
+                T, H, W = video_sizes[curr_vae_split_idx]
                 t = (T - 1) // self.latent_downsample_temporal + 1
                 h = H // self.latent_downsample_spatial
                 w = W // self.latent_downsample_spatial
@@ -436,7 +435,7 @@ class Lance(PreTrainedModel):
 
                 # prepare packed_vae_position_ids
                 vae_position_ids.append(
-                    get_flattened_position_ids_extrapolate_video(t, h, w, max_latent_size=self.max_latent_size)  
+                    get_flattened_position_ids_extrapolate_video(t, h, w, max_latent_size=self.max_latent_size)
                 )
 
                 if len(current_vae_mse_indexes_local) != len(current_vae_token_indexes_local):
@@ -478,7 +477,7 @@ class Lance(PreTrainedModel):
                 vit_sample_end_idx = cu_vit_sample_lens[curr_vit_split_idx + N_vit_split]
                 current_val_packed_vit_tokens = val_packed_vit_tokens[vit_sample_start_idx:vit_sample_end_idx].to(dtype)
                 current_val_vit_video_grid_thw = vit_video_grid_thw[curr_vit_split_idx : curr_vit_split_idx + N_vit_split]
-                curr_vit_split_idx += N_vit_split 
+                curr_vit_split_idx += N_vit_split
 
                 if self.vit_type in ["qwen2_5_vl", "qwen_2_5_vl_original"]:
                     packed_vit_token_embed = self.vit_model(hidden_states=current_val_packed_vit_tokens, grid_thw=current_val_vit_video_grid_thw)
@@ -501,16 +500,16 @@ class Lance(PreTrainedModel):
             attention_mask = self.process_attention_mask(current_attn_modes_, current_split_lens_,  [current_seq_len, current_pad], device = device, BLOCK_SIZE = BLOCK_SIZE)
             validation_noise_seed = kwargs.get("validation_noise_seed", -1)
             if validation_noise_seed > 0:
-                generator = torch.Generator(device=device).manual_seed(validation_noise_seed + get_global_rank() * max_samples + i_sample)  
+                generator = torch.Generator(device=device).manual_seed(validation_noise_seed + get_global_rank() * max_samples + i_sample)
             else:
                 generator = None
-            x_t = torch.randn(num_vid_tokens, self.patch_latent_dim, generator=generator, device=device, dtype=dtype)  
+            x_t = torch.randn(num_vid_tokens, self.patch_latent_dim, generator=generator, device=device, dtype=dtype)
 
-            if curr_padded_latent != []:  
+            if curr_padded_latent != []:
                 curr_padded_latent[current_vae_mse_indexes_local_in_vae] = x_t[current_vae_mse_indexes_local_in_vae]
                 x_t = curr_padded_latent
 
-            timesteps = torch.linspace(1, 0, num_timesteps + 1, device=x_t.device) 
+            timesteps = torch.linspace(1, 0, num_timesteps + 1, device=x_t.device)
             timesteps = timestep_shift * timesteps / (1 + (timestep_shift - 1) * timesteps)
             dts = timesteps[:-1] - timesteps[1:]
             timesteps = timesteps[:-1]
@@ -522,9 +521,9 @@ class Lance(PreTrainedModel):
                     input_ids=current_text_ids.unsqueeze(0),
                     image_grid_thw=grid_thw_rope,
                     video_grid_thw=grid_thw_rope,
-                    second_per_grid_ts=[1.0]*len(grid_thw_rope),  
-                    attention_mask=torch.ones([1, len(current_text_ids)], dtype=torch.long, device=device),  
-                )  
+                    second_per_grid_ts=[1.0]*len(grid_thw_rope),
+                    attention_mask=torch.ones([1, len(current_text_ids)], dtype=torch.long, device=device),
+                )
                 current_pos_ids = shift_position_ids(
                     current_pos_ids,
                     pos_shift=1000,
@@ -558,7 +557,7 @@ class Lance(PreTrainedModel):
                     timestep[current_vae_mse_indexes_local_in_vae] = torch.tensor([timestep_] * current_vae_mse_indexes_local_in_vae.shape[0], device=x_t.device)
                     if timestep_ > cfg_interval[0] and timestep_ <= cfg_interval[1]:
                         cfg_text_scale_ = cfg_text_scale
-                        cfg_vit_scale_ = cfg_vit_scale 
+                        cfg_vit_scale_ = cfg_vit_scale
                     else:
                         cfg_text_scale_ = 1.0
                         cfg_vit_scale_ = 1.0
@@ -570,7 +569,7 @@ class Lance(PreTrainedModel):
                     vae_embed = vae_embed.to(current_sequence.dtype)
                     current_sequence[current_vae_token_indexes_local] = vae_embed
 
-                    extra_inputs = {} 
+                    extra_inputs = {}
                     if self.use_moe:
                         if N_vit_split != 0:
                             packed_und_token_indexes = torch.cat([current_text_indexes_local, current_vit_indexes_local], dim=0)
@@ -583,8 +582,8 @@ class Lance(PreTrainedModel):
 
                     self.language_model.to(current_sequence.dtype)
                     cond_hidden_state = self.language_model(
-                    packed_sequence=current_sequence[:current_seq_len],  
-                    sample_lens=[current_seq_len],  
+                    packed_sequence=current_sequence[:current_seq_len],
+                    sample_lens=[current_seq_len],
                     attention_mask=attention_mask,
                     packed_position_ids=current_pos_ids.to(dtype=index_dtype),
                     mode_forward="validation",
@@ -594,7 +593,7 @@ class Lance(PreTrainedModel):
 
                     # cfg text forward
                     if cfg_text_scale_ > 1.0:
-                        uncond_sequence = current_sequence[uncond_mask] 
+                        uncond_sequence = current_sequence[uncond_mask]
                         cfg_text_v_t = self.uncond_forward(uncond_sequence, uncond_pos_ids, uncond_seq_len, uncond_attn_mask, uncond_extra_inputs, current_vae_mse_indexes_local, current_seq_len)
 
                         if cfg_vit_pro:
@@ -630,7 +629,7 @@ class Lance(PreTrainedModel):
                             raise NotImplementedError(f"{cfg_renorm_type} is not suppoprted")
                         v_t = v_t_ * scale
 
-                    x_t[current_vae_mse_indexes_local_in_vae] = x_t[current_vae_mse_indexes_local_in_vae] - v_t.to(x_t.device) * dts[i] 
+                    x_t[current_vae_mse_indexes_local_in_vae] = x_t[current_vae_mse_indexes_local_in_vae] - v_t.to(x_t.device) * dts[i]
 
             curr_seq_target, patch = 0, []
             for i_target in range(N_noise_element):
@@ -673,13 +672,13 @@ class Lance(PreTrainedModel):
             end = start + split_len_
             split_in_uncond = int(uncond_mask[start:end].sum())
             start += split_len_
-            if split_in_uncond == 0:  
+            if split_in_uncond == 0:
                 continue
             else:
                 if attn_mode_ in ["noise", "full_noise"]:
                     start_gen, end_gen = sum(uncond_split_lens) + 1, sum(uncond_split_lens) + 1 + split_len_ - 2
                     uncond_packed_gen_token_indexes.extend(range(start_gen, end_gen))
-                uncond_split_lens.append(split_in_uncond)  
+                uncond_split_lens.append(split_in_uncond)
                 uncond_attn_modes.append(attn_mode_)
 
         uncond_seq_len = sum(uncond_split_lens)
@@ -691,10 +690,10 @@ class Lance(PreTrainedModel):
 
         uncond_packed_gen_token_indexes = torch.tensor(uncond_packed_gen_token_indexes, dtype=torch.long, device=device)
         all_indexes = torch.arange(0, uncond_seq_len).to(device)
-        und_token_mask = ~torch.isin(all_indexes, uncond_packed_gen_token_indexes) 
+        und_token_mask = ~torch.isin(all_indexes, uncond_packed_gen_token_indexes)
         uncond_packed_und_token_indexes = all_indexes[und_token_mask]
 
-        uncond_extra_inputs = {} 
+        uncond_extra_inputs = {}
         if self.use_moe:
             uncond_extra_inputs.update(
                 packed_und_token_indexes=uncond_packed_und_token_indexes,
@@ -712,10 +711,10 @@ class Lance(PreTrainedModel):
         if apply_qwen_2_5_vl_pos_emb:
             uncond_pos_ids, uncond_rope_deltas = self.language_model.get_rope_index(
                 input_ids=uncond_text_ids.unsqueeze(0),
-                image_grid_thw=grid_thw_rope, 
-                video_grid_thw=grid_thw_rope,  
-                second_per_grid_ts=[1.0] * len(grid_thw_rope), 
-                attention_mask=torch.ones([1, len(uncond_text_ids)], dtype=torch.long, device=device), 
+                image_grid_thw=grid_thw_rope,
+                video_grid_thw=grid_thw_rope,
+                second_per_grid_ts=[1.0] * len(grid_thw_rope),
+                attention_mask=torch.ones([1, len(uncond_text_ids)], dtype=torch.long, device=device),
             )
             uncond_pos_ids = shift_position_ids(
                 uncond_pos_ids,
@@ -758,7 +757,7 @@ class Lance(PreTrainedModel):
             mode_forward="validation",  # NOTE
             **uncond_extra_inputs,
         )
-        uncond_current_vae_mse_indexes_local = current_vae_mse_indexes_local - (current_seq_len - uncond_seq_len)  
+        uncond_current_vae_mse_indexes_local = current_vae_mse_indexes_local - (current_seq_len - uncond_seq_len)
         cfg_text_v_t = self.llm2vae(uncond_hidden_state[uncond_current_vae_mse_indexes_local])
 
         return cfg_text_v_t
@@ -770,13 +769,13 @@ class Lance(PreTrainedModel):
         val_packed_text_indexes: torch.LongTensor,
         val_packed_position_ids: torch.LongTensor,
         val_ce_loss_indexes: torch.LongTensor,
-        val_sample_N_target: List[int],  
+        val_sample_N_target: List[int],
         val_split_lens: List[int],
         val_attn_modes: List[str],
         val_sample_lens: List[int],
         val_sample_type: List[str],
         val_packed_vit_tokens: Optional[torch.Tensor] = None,
-        val_vit_video_grid_thw: Optional[torch.IntTensor] = None,  
+        val_vit_video_grid_thw: Optional[torch.IntTensor] = None,
         max_samples: int = 1,
         max_length: int = 256,
         device: torch.device = None,
@@ -787,7 +786,7 @@ class Lance(PreTrainedModel):
         do_sample: bool = False,
         temperature: float = 1.0,
         caption: any = "",
-        tokenizer: any = None,  
+        tokenizer: any = None,
         apply_chat_template: bool = False,
         apply_qwen_2_5_vl_pos_emb: bool = False,
         image_token_id: int = 151655,
@@ -812,22 +811,22 @@ class Lance(PreTrainedModel):
         if val_packed_vit_tokens is not None:
             val_packed_vit_tokens = torch.cat(val_packed_vit_tokens, dim=0)
 
-        max_samples = min(len(val_sample_lens), max_samples)  
+        max_samples = min(len(val_sample_lens), max_samples)
         cnt_samples = 0
         generated_sequence_all = []
 
-        L = len(val_sample_lens)  
+        L = len(val_sample_lens)
         curr_vit_split_idx = 0
         for i_sample in range(L):
             left, right = sample_splits[i_sample][0], sample_splits[i_sample][-1] + 1
             # --- for interleave ---
             current_split_lens = val_split_lens[left:right]
             current_attn_modes = val_attn_modes[left:right]
-            N_target = val_sample_N_target[i_sample]  
+            N_target = val_sample_N_target[i_sample]
             N_vit_split = current_attn_modes.count("full")
 
             if val_sample_type[i_sample] != "und":
-                curr_vit_split_idx += N_vit_split  
+                curr_vit_split_idx += N_vit_split
                 continue
             cnt_samples += 1
             if cnt_samples > max_samples:
@@ -840,7 +839,7 @@ class Lance(PreTrainedModel):
             vit_sample_end_idx = cu_vit_sample_lens[curr_vit_split_idx + N_vit_split]
             current_val_packed_vit_tokens = val_packed_vit_tokens[vit_sample_start_idx:vit_sample_end_idx]
             current_val_vit_video_grid_thw = val_vit_video_grid_thw[curr_vit_split_idx : curr_vit_split_idx + N_vit_split]
-            curr_vit_split_idx += N_vit_split  
+            curr_vit_split_idx += N_vit_split
 
             if N_vit_split > 0 :
                 if self.vit_type in ["qwen2_5_vl", "qwen_2_5_vl_original"]:
@@ -864,18 +863,18 @@ class Lance(PreTrainedModel):
             num_text_ids = current_text_ids.shape[0]
             num_last_split = num_text_ids - sum(current_split_lens[:-N_target])
 
-            current_split_lens = current_split_lens[:-N_target]  
+            current_split_lens = current_split_lens[:-N_target]
 
             if num_last_split > 1:
-                current_split_lens.extend([num_last_split - 1])  
+                current_split_lens.extend([num_last_split - 1])
 
             max_seq_len = (max_length + num_text_ids + BLOCK_SIZE - 1) // BLOCK_SIZE * BLOCK_SIZE
             num_pad = max_seq_len - num_text_ids
 
             current_text_ids = torch.cat(
                 [current_text_ids, torch.full((num_pad,), pad_token_id, dtype=torch.long, device=device)], dim=0
-            ) 
-            packed_text_embedding = self.language_model.model.embed_tokens(current_text_ids).to(dtype)  
+            )
+            packed_text_embedding = self.language_model.model.embed_tokens(current_text_ids).to(dtype)
 
             if N_vit_split > 0 :
                 mask = current_text_ids == image_token_id
@@ -886,16 +885,16 @@ class Lance(PreTrainedModel):
             else:
                 curr_packed_sequence = packed_text_embedding
 
-            step = num_text_ids - 1  
+            step = num_text_ids - 1
             generated_sequence = []
             if apply_qwen_2_5_vl_pos_emb:
                 current_packed_position_ids, rope_deltas = self.language_model.get_rope_index(
                     input_ids=current_text_ids.unsqueeze(0),
                     image_grid_thw=current_val_vit_video_grid_thw,
-                    video_grid_thw=current_val_vit_video_grid_thw,  
-                    second_per_grid_ts=[1.0],  
+                    video_grid_thw=current_val_vit_video_grid_thw,
+                    second_per_grid_ts=[1.0],
                     attention_mask=torch.ones([1, max_seq_len], dtype=torch.long, device=device),  # Full-one attention mask.
-                )  
+                )
             else:
                 current_pos_ids = current_pos_ids[:num_text_ids]
                 pos_pad_start = int(current_pos_ids[-1] + 1)
@@ -903,7 +902,7 @@ class Lance(PreTrainedModel):
                 current_packed_position_ids = torch.cat([current_pos_ids, current_pad], dim=0)
 
             current_sample_lens = [max_seq_len]
-            seqlen = sum(current_sample_lens)  
+            seqlen = sum(current_sample_lens)
             current_attn_modes_ = current_attn_modes[: len(current_split_lens)] + ["causal", "causal"]
             current_attn_modes_ = ["full" if mode_=="full_noise" else mode_ for mode_ in current_attn_modes_]
             while step < (max_seq_len - 1):
@@ -914,7 +913,7 @@ class Lance(PreTrainedModel):
 
                 extra_inputs = {"mode": "und"}
                 if self.use_moe:
-                    packed_und_token_indexes = torch.arange(0, max_seq_len, device=device)  
+                    packed_und_token_indexes = torch.arange(0, max_seq_len, device=device)
                     extra_inputs.update(
                         packed_und_token_indexes=packed_und_token_indexes,
                         packed_gen_token_indexes=None,
@@ -946,7 +945,7 @@ class Lance(PreTrainedModel):
                 curr_packed_sequence[step + 1] = self.language_model.model.embed_tokens(curr_tokens)
                 step += 1
 
-            generated_sequence = torch.stack([i.to(device) for i in generated_sequence], dim=0) 
+            generated_sequence = torch.stack([i.to(device) for i in generated_sequence], dim=0)
             generated_sequence_all.append(generated_sequence)
         return generated_sequence_all, caption, index
 
@@ -1171,7 +1170,7 @@ class Lance(PreTrainedModel):
             _curr += 1
 
             packed_vit_tokens.append(vit_token)
-            num_img_tokens = len(vit_tokens[0]) // 4  
+            num_img_tokens = len(vit_tokens[0]) // 4
             vit_token_seqlens.append(num_img_tokens)
             packed_vit_token_indexes.extend(range(_curr, _curr + num_img_tokens))
             packed_indexes.extend(range(curr, curr + num_img_tokens))
@@ -1208,8 +1207,8 @@ class Lance(PreTrainedModel):
     def forward_cache_update_vit_validation(
         self,
         past_key_values: NaiveCache,
-        vit_vae_video_grid_thw: torch.IntTensor, 
-        packed_text_ids: torch.LongTensor, 
+        vit_vae_video_grid_thw: torch.IntTensor,
+        packed_text_ids: torch.LongTensor,
         packed_text_indexes: torch.LongTensor,
         packed_vit_tokens: torch.Tensor,
         packed_vit_token_indexes: torch.LongTensor,
@@ -1341,7 +1340,7 @@ class Lance(PreTrainedModel):
             packed_query_position_ids = packed_query_position_ids + 1
             step += 1
 
-            if end_token_id is not None and curr_tokens[0].item() == end_token_id:  
+            if end_token_id is not None and curr_tokens[0].item() == end_token_id:
                 generated_sequence.append(curr_tokens)
                 break
 
@@ -1350,8 +1349,8 @@ class Lance(PreTrainedModel):
 
     def init_gen_context(self, device: torch.device, dtype: torch.dtype):
         gen_context = {
-            'kv_lens': torch.tensor([0], device=device, dtype=dtype), 
-            'past_key_values': NaiveCache(self.config.llm_config.num_hidden_layers), 
+            'kv_lens': torch.tensor([0], device=device, dtype=dtype),
+            'past_key_values': NaiveCache(self.config.llm_config.num_hidden_layers),
         }
         return gen_context
 
@@ -1384,7 +1383,7 @@ class Lance(PreTrainedModel):
         cfg_renorm_min: float = 0.0,
         cfg_renorm_type: str = "global",
         cfg_text_scale: float = 1.0,
-        cfg_vit_scale: float = 1.0, 
+        cfg_vit_scale: float = 1.0,
         device=None,
         dtype=None,
         new_token_ids=None,
@@ -1413,24 +1412,24 @@ class Lance(PreTrainedModel):
         x_t_all = []
         max_samples = kwargs.get("max_samples", 16)
         L = max(len(val_sample_lens) - 1, 1)
-        max_samples = min(L, max_samples) 
+        max_samples = min(L, max_samples)
 
         gen_idx = 0
-        curr_vae_split_idx, curr_vit_split_idx = 0, 0  
+        curr_vae_split_idx, curr_vit_split_idx = 0, 0
 
         padded_videos = []
         for i_sample in range(L):  # fix: need -1.
             left, right = sample_splits[i_sample][0], sample_splits[i_sample][-1] + 1
             current_split_lens = val_split_lens[left:right]
             current_attn_modes = val_attn_modes[left:right]
-            N_target = val_sample_N_target[i_sample]  
+            N_target = val_sample_N_target[i_sample]
             N_noise_element = current_attn_modes.count("noise") + current_attn_modes.count("full_noise") + current_attn_modes.count("full_noise_target")
             N_vit_split = current_attn_modes.count("full")
 
             if right > len(val_attn_modes):
                 break
             if N_noise_element<=0:
-                curr_vit_split_idx += N_vit_split  
+                curr_vit_split_idx += N_vit_split
                 continue
 
             if gen_idx >= max_samples:
@@ -1453,7 +1452,7 @@ class Lance(PreTrainedModel):
             current_vae_mse_indexes_local = val_mse_loss_indexes[vae_mse_mask] - sample_start_idx  # Indices of x_t positions that need updates.
             current_vae_mse_indexes_local_in_vae = (
                 current_vae_mse_indexes_local - current_vae_mse_indexes_local[0] + torch.where(current_vae_token_indexes_local == current_vae_mse_indexes_local[0])[0]
-            )  
+            )
 
             num_vid_tokens_list, vid_shape_list, vae_position_ids, curr_padded_latent = [], [], [], []
 
@@ -1461,11 +1460,11 @@ class Lance(PreTrainedModel):
             cfg_vision_pro = False
             if cfg_vision_scale > 1.0 and "full" in current_attn_modes:
                 cfg_vision_pro = True
-                vision_uncond_mask =  i_sample_modality <= 1 
+                vision_uncond_mask =  i_sample_modality <= 1
                 _, vision_uncond_pos_ids, _ = self.uncond_split_pro_kvcache(vision_uncond_mask, current_text_ids, device, dtype, apply_qwen_2_5_vl_pos_emb, grid_thw_rope = grid_thw_rope[-N_target:], current_attn_modes=current_attn_modes, current_split_lens=current_split_lens, i_sample_task=i_sample_task, i_sample_modality=i_sample_modality ) # NOTE: grid_thw_rope excludes VIT/VAE condition entries.
 
             for i_target in range(N_noise_element):
-                T, H, W = video_sizes[curr_vae_split_idx]  
+                T, H, W = video_sizes[curr_vae_split_idx]
                 t = (T - 1) // self.latent_downsample_temporal + 1
                 h = H // self.latent_downsample_spatial
                 w = W // self.latent_downsample_spatial
@@ -1479,7 +1478,7 @@ class Lance(PreTrainedModel):
                 )
 
                 if len(current_vae_mse_indexes_local) != len(current_vae_token_indexes_local):
-                    padded_latent_ = val_padded_latent[curr_vae_split_idx]  
+                    padded_latent_ = val_padded_latent[curr_vae_split_idx]
 
                     patches = rearrange(padded_latent_, "(t pt) (h ph) (w pw) c -> (t h w) (pt ph pw c)", t=t, pt=pt, h=h, ph=ph, w=w, pw=pw)
                     curr_padded_latent.append(patches)
@@ -1511,7 +1510,7 @@ class Lance(PreTrainedModel):
                 vit_sample_end_idx = cu_vit_sample_lens[curr_vit_split_idx + N_vit_split]
                 current_val_packed_vit_tokens = val_packed_vit_tokens[vit_sample_start_idx:vit_sample_end_idx].to(dtype)
                 current_val_vit_video_grid_thw = vit_video_grid_thw[curr_vit_split_idx : curr_vit_split_idx + N_vit_split]
-                curr_vit_split_idx += N_vit_split 
+                curr_vit_split_idx += N_vit_split
 
                 if self.vit_type in ["qwen2_5_vl", "qwen_2_5_vl_original"]:
                     packed_vit_token_embed = self.vit_model(hidden_states=current_val_packed_vit_tokens, grid_thw=current_val_vit_video_grid_thw)
@@ -1533,16 +1532,16 @@ class Lance(PreTrainedModel):
 
             validation_noise_seed = kwargs.get("validation_noise_seed", -1)
             if validation_noise_seed > 0:
-                generator = torch.Generator(device=device).manual_seed(validation_noise_seed + get_global_rank() * max_samples + i_sample) 
+                generator = torch.Generator(device=device).manual_seed(validation_noise_seed + get_global_rank() * max_samples + i_sample)
             else:
                 generator = None
-            x_t = torch.randn(num_vid_tokens, self.patch_latent_dim, generator=generator, device=device, dtype=dtype) 
+            x_t = torch.randn(num_vid_tokens, self.patch_latent_dim, generator=generator, device=device, dtype=dtype)
 
-            if curr_padded_latent != []: 
+            if curr_padded_latent != []:
                 curr_padded_latent[current_vae_mse_indexes_local_in_vae] = x_t[current_vae_mse_indexes_local_in_vae]
                 x_t = curr_padded_latent
 
-            timesteps = torch.linspace(1, 0, num_timesteps + 1, device=x_t.device)  
+            timesteps = torch.linspace(1, 0, num_timesteps + 1, device=x_t.device)
             timesteps = timestep_shift * timesteps / (1 + (timestep_shift - 1) * timesteps)
             dts = timesteps[:-1] - timesteps[1:]
             timesteps = timesteps[:-1]
@@ -1552,11 +1551,11 @@ class Lance(PreTrainedModel):
 
                 current_pos_ids, _ = self.language_model.get_rope_index(
                     input_ids=current_text_ids.unsqueeze(0),
-                    image_grid_thw=grid_thw_rope, 
-                    video_grid_thw=grid_thw_rope, 
-                    second_per_grid_ts=[1.0]*len(grid_thw_rope),  
-                    attention_mask=torch.ones([1, len(current_text_ids)], dtype=torch.long, device=device), 
-                )  
+                    image_grid_thw=grid_thw_rope,
+                    video_grid_thw=grid_thw_rope,
+                    second_per_grid_ts=[1.0]*len(grid_thw_rope),
+                    attention_mask=torch.ones([1, len(current_text_ids)], dtype=torch.long, device=device),
+                )
                 current_pos_ids = shift_position_ids(current_pos_ids, pos_shift = 1000, attn_modes = current_attn_modes, split_lens = current_split_lens, shift_attn_mode=['full_noise',"full"], pro_type = 10, i_sample_task=i_sample_task, i_sample_modality=i_sample_modality)
 
             if cfg_text_scale > 1.0:
@@ -1564,8 +1563,8 @@ class Lance(PreTrainedModel):
                 _, uncond_pos_ids, _ = self.uncond_split_pro_kvcache(uncond_mask, current_text_ids, device, dtype, apply_qwen_2_5_vl_pos_emb, grid_thw_rope = grid_thw_rope, current_attn_modes=current_attn_modes, current_split_lens=current_split_lens, i_sample_task=i_sample_task, i_sample_modality=i_sample_modality)
 
 
-            extra_inputs = {}  
-            if self.use_moe: 
+            extra_inputs = {}
+            if self.use_moe:
                 if N_vit_split != 0:
                     packed_und_token_indexes = torch.cat([current_text_indexes_local, current_vit_indexes_local], dim=0)
                 else:
@@ -1587,7 +1586,7 @@ class Lance(PreTrainedModel):
 
             # For kv cache
             gen_context = self.init_gen_context(device=device, dtype=torch.int32) # gen_context initializes kv_lens, ropes, and past_key_values.
-            cfg_text_context = deepcopy(gen_context)  
+            cfg_text_context = deepcopy(gen_context)
             cfg_vision_context = deepcopy(gen_context )
 
             current_cond_start, current_cond_end = 0, 0
@@ -1596,8 +1595,8 @@ class Lance(PreTrainedModel):
             self.eval()
             for i_attn_mode_, current_cond_len in zip(current_attn_modes, current_split_lens):
                 current_cond_end += current_cond_len
-                if i_attn_mode_ == "noise": 
-                    vae_in_packed_sequence_index = torch.arange(current_cond_start, current_cond_end, dtype=torch.long, device=device) 
+                if i_attn_mode_ == "noise":
+                    vae_in_packed_sequence_index = torch.arange(current_cond_start, current_cond_end, dtype=torch.long, device=device)
                     packed_seqlens_vae = current_cond_len
                     target_packed_vae_token_indexes = torch.arange(1, current_cond_len-1, dtype=torch.long, device=device)
                     target_packed_text_indexes = torch.tensor([0, current_cond_len-1], dtype=torch.long, device=device)
@@ -1612,7 +1611,7 @@ class Lance(PreTrainedModel):
                 gen_context = self.update_gen_context(current_sequence, current_pos_ids, gen_context, extra_inputs, current_cond_start, current_cond_end, current_cond_len, device, dtype, is_causal = is_causal)
                 if cfg_text_scale > 1.0 and i_sample_modality[current_cond_start] != 0:
                     cfg_text_context = self.update_gen_context(current_sequence, current_pos_ids, cfg_text_context, extra_inputs, current_cond_start, current_cond_end, current_cond_len, device, dtype, is_causal = is_causal)
-                if cfg_vision_scale > 1.0 and i_sample_modality[current_cond_start] > 1: 
+                if cfg_vision_scale > 1.0 and i_sample_modality[current_cond_start] > 1:
                     cfg_vision_context = self.update_gen_context(current_sequence, current_pos_ids, cfg_vision_context, extra_inputs, current_cond_start, current_cond_end, current_cond_len, device, dtype, is_causal = is_causal)
 
                 current_cond_start = current_cond_end
@@ -1625,7 +1624,7 @@ class Lance(PreTrainedModel):
                     timestep[current_vae_mse_indexes_local_in_vae] = torch.tensor([timestep_] * current_vae_mse_indexes_local_in_vae.shape[0], device=x_t.device)
                     if timestep_ > cfg_interval[0] and timestep_ <= cfg_interval[1]:
                         cfg_text_scale_ = cfg_text_scale
-                        cfg_vision_scale_ = cfg_vision_scale 
+                        cfg_vision_scale_ = cfg_vision_scale
                     else:
                         cfg_text_scale_ = 1.0
                         cfg_vision_scale_ = 1.0
@@ -1645,13 +1644,13 @@ class Lance(PreTrainedModel):
 
 
                     v_t_output = self.language_model.forward_inference(
-                        packed_query_sequence=packed_sequence_vae, 
-                        query_lens=torch.tensor([packed_seqlens_vae],dtype=torch.int32, device=device), 
-                        packed_query_position_ids=current_pos_ids[:, :, current_cond_start:current_cond_end],  
-                        packed_query_indexes=vae_in_packed_sequence_index,  
-                        past_key_values=gen_context['past_key_values'],  
-                        key_values_lens=gen_context['kv_lens'],  
-                        packed_key_value_indexes=torch.arange(0,gen_context['kv_lens'][0], dtype=torch.int64, device=device),  
+                        packed_query_sequence=packed_sequence_vae,
+                        query_lens=torch.tensor([packed_seqlens_vae],dtype=torch.int32, device=device),
+                        packed_query_position_ids=current_pos_ids[:, :, current_cond_start:current_cond_end],
+                        packed_query_indexes=vae_in_packed_sequence_index,
+                        past_key_values=gen_context['past_key_values'],
+                        key_values_lens=gen_context['kv_lens'],
+                        packed_key_value_indexes=torch.arange(0,gen_context['kv_lens'][0], dtype=torch.int64, device=device),
                         update_past_key_values=False,
                         is_causal=False,
                         **extra_inputs_vae,
@@ -1666,7 +1665,7 @@ class Lance(PreTrainedModel):
                             packed_query_sequence=packed_sequence_vae,
                             query_lens=torch.tensor([packed_seqlens_vae],dtype=torch.int32, device=device),
                             packed_query_position_ids=uncond_pos_ids[:,:,cfg_text_context['kv_lens'][0]:cfg_text_context['kv_lens'][0]+packed_seqlens_vae],
-                            packed_query_indexes=vae_in_packed_sequence_index - sum(i_sample_modality==0), 
+                            packed_query_indexes=vae_in_packed_sequence_index - sum(i_sample_modality==0),
                             past_key_values=cfg_text_context['past_key_values'],
                             key_values_lens=cfg_text_context['kv_lens'],
                             packed_key_value_indexes=torch.arange(0,cfg_text_context['kv_lens'][0], dtype=torch.int64, device=device),
@@ -1682,7 +1681,7 @@ class Lance(PreTrainedModel):
                                 packed_query_sequence=packed_sequence_vae,
                                 query_lens=torch.tensor([packed_seqlens_vae],dtype=torch.int32, device=device),
                                 packed_query_position_ids=vision_uncond_pos_ids[:,:,cfg_vision_context['kv_lens'][0]:cfg_vision_context['kv_lens'][0]+packed_seqlens_vae],
-                                packed_query_indexes=vae_in_packed_sequence_index - sum(i_sample_modality==4), 
+                                packed_query_indexes=vae_in_packed_sequence_index - sum(i_sample_modality==4),
                                 past_key_values=cfg_vision_context['past_key_values'],
                                 key_values_lens=cfg_vision_context['kv_lens'],
                                 packed_key_value_indexes=torch.arange(0,cfg_vision_context['kv_lens'][0], dtype=torch.int64, device=device),
@@ -1774,10 +1773,10 @@ class Lance(PreTrainedModel):
         if apply_qwen_2_5_vl_pos_emb:
             uncond_pos_ids, uncond_rope_deltas = self.language_model.get_rope_index(
                 input_ids=uncond_text_ids.unsqueeze(0),
-                image_grid_thw=grid_thw_rope,  
-                video_grid_thw=grid_thw_rope,  
-                second_per_grid_ts=[1.0] * len(grid_thw_rope),  
-                attention_mask=torch.ones([1, len(uncond_text_ids)], dtype=torch.long, device=device),  
+                image_grid_thw=grid_thw_rope,
+                video_grid_thw=grid_thw_rope,
+                second_per_grid_ts=[1.0] * len(grid_thw_rope),
+                attention_mask=torch.ones([1, len(uncond_text_ids)], dtype=torch.long, device=device),
             )
             uncond_attn_modes, uncond_split_lens = self.get_uncond_attn_modes_split_lens( current_attn_modes, current_split_lens, uncond_mask)
             i_sample_task = i_sample_task[uncond_mask]
@@ -1822,6 +1821,6 @@ class Lance(PreTrainedModel):
         )
 
         gen_context['past_key_values'] = output.past_key_values
-        gen_context['kv_lens'] += current_cond_len 
+        gen_context['kv_lens'] += current_cond_len
 
         return gen_context

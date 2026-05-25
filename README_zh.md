@@ -116,6 +116,13 @@
 - **软件环境：** Python 3.10+，CUDA 12.4+（必需）
 - **硬件环境：** 推理至少需要一张显存不低于 40GB 的 GPU
 
+我们在 NVIDIA A100 上测试通过了以下依赖组合：
+
+- PyTorch 2.8.0 + cu126 + flash-attn 2.8.3
+- PyTorch 2.5.1 + cu124 + flash-attn 2.6.3
+
+默认 `requirements.txt` 使用 PyTorch 2.8.0 + cu126 环境。对于其他 GPU 型号，请根据驱动版本、CUDA runtime、Python 版本和 GPU 架构自行选择并验证匹配的 PyTorch 与 `flash-attn` 版本组合。
+
 
 ### 安装步骤
 

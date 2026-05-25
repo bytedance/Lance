@@ -47,9 +47,9 @@ modality_map = {
     'system_prompt': -1,
     'text': 0,
     'noise': 1,
-    'ref_source': 2, 
-    'ref_image': 3, 
-    'ref_vit': 4 
+    'ref_source': 2,
+    'ref_image': 3,
+    'ref_vit': 4
 }
 
 
@@ -119,11 +119,11 @@ class ValidationDataset(Dataset):
             resolution_vae = 768
             resolution_vit = 672
         elif self.data_config.resolution == "video_360p":
-            resolution_vae = 480  
-            resolution_vit = 476  
+            resolution_vae = 480
+            resolution_vit = 476
         elif self.data_config.resolution == "video_480p":
-            resolution_vae = 640  
-            resolution_vit = 616  
+            resolution_vae = 640
+            resolution_vit = 616
         else:
             raise ValueError(f"Unknown resolution: {self.data_config.resolution}")
 
@@ -166,7 +166,7 @@ class ValidationDataset(Dataset):
 
     def set_sequence_status(self):
         sequence_status = dict(
-            curr=0, 
+            curr=0,
             sample_lens=[],
             sample_type=[],
             sample_N_target=[],
@@ -179,8 +179,8 @@ class ValidationDataset(Dataset):
             packed_label_ids=[],
             ce_loss_indexes=[],
             ce_loss_weights=[],
-            vae_image_tensors=[], 
-            vae_video_tensors=[],  
+            vae_image_tensors=[],
+            vae_video_tensors=[],
             packed_latent_position_ids=[],
             vae_latent_shapes=[],
             packed_vae_token_indexes=[],
@@ -190,14 +190,13 @@ class ValidationDataset(Dataset):
             vit_token_seqlens=[],
             packed_vit_position_ids=[],
             packed_vit_token_indexes=[],
-            vit_video_grid_thw=[],  
-            vae_video_grid_thw=[], 
-            video_grid_thw=[],  
-            vit_video_tensors=[],  
-            vae_video_latent=[],  
-            vae_data_mode=[], 
-            vit_data_mode=[],  
-            key_frame_mask=[],  
+            vit_video_grid_thw=[],
+            vae_video_grid_thw=[],
+            video_grid_thw=[],
+            vit_video_tensors=[],
+            vae_video_latent=[],
+            vae_data_mode=[],
+            vit_data_mode=[],
             sample_task=[],
             sample_modality=[],
         )
@@ -235,7 +234,7 @@ class ValidationDataset(Dataset):
             else:
                 image = image.convert("RGB")
             video_frames = [image]
-        else: 
+        else:
             video_reader = VideoReader(video_stream, ctx=decord.cpu(worker_id % self.cpu_count))
             total_frames = len(video_reader)
 
@@ -248,9 +247,9 @@ class ValidationDataset(Dataset):
             video_frames = self._read_decord(video_reader, frames_sampler_output.indices)
 
         if vision_stream == "vae_video":
-            video_tensor = self.transform(video_frames)  
+            video_tensor = self.transform(video_frames)
         elif vision_stream == "vit_video":
-            video_tensor = self.vit_transform(video_frames)  
+            video_tensor = self.vit_transform(video_frames)
             if element_dtype == "image":
                 video_tensor = video_tensor.repeat(1, 2, 1, 1)
             if video_tensor.shape[1] % 2 == 1:
@@ -259,20 +258,20 @@ class ValidationDataset(Dataset):
 
         else:
             raise ValueError(f"Unknown vision_stream: {vision_stream}")
-        return video_tensor 
+        return video_tensor
 
     def process_vit_video(self, video_tensor, curr: int, curr_rope_id: int, curr_split_len: int, curr_video_grid_thw: None, item_loss=0):
         if not self.data_config.text_template:
-            self.sample["packed_text_ids"].append(self.start_of_image)  
+            self.sample["packed_text_ids"].append(self.start_of_image)
             self.sample["packed_text_indexes"].append(curr)
             curr += 1
             curr_split_len += 1
 
-        if isinstance(video_tensor, torch.Tensor):  
+        if isinstance(video_tensor, torch.Tensor):
             self.sample["vit_video_tensors"].append(video_tensor)
             vit_tokens = patchify_video_with_merge(
                 video_tensor, self.data_config.vit_patch_size, self.data_config.vit_patch_size_temporal
-            ) 
+            )
             num_video_tokens = vit_tokens.shape[0] // 4
             t, h, w = video_tensor.size(1), video_tensor.size(2), video_tensor.size(3)
 
@@ -284,7 +283,7 @@ class ValidationDataset(Dataset):
                 t // self.data_config.vit_patch_size_temporal,
                 h // self.data_config.vit_patch_size,
                 w // self.data_config.vit_patch_size,
-            ] 
+            ]
         self.sample["vit_video_grid_thw"].append(vit_video_grid_thw)
         curr_video_grid_thw.append(vit_video_grid_thw)
 
@@ -299,7 +298,7 @@ class ValidationDataset(Dataset):
             curr_split_len += num_video_tokens
 
             self.sample["packed_text_ids"].extend([self.image_token_id] * num_video_tokens)
-            self.sample["packed_text_ids"].append(self.end_of_image) 
+            self.sample["packed_text_ids"].append(self.end_of_image)
             self.sample["packed_text_indexes"].append(curr)
             curr += 1
             curr_split_len += 1
@@ -314,15 +313,15 @@ class ValidationDataset(Dataset):
     def process_text(self, caption: str, curr: int, curr_rope_id: int, curr_split_len: int, item_loss=0):
         """处理文本，添加特殊token"""
         text_ids = self.tokenizer.encode(caption)
-        shifted_text_ids = [self.bos_token_id] + text_ids 
+        shifted_text_ids = [self.bos_token_id] + text_ids
         self.sample["packed_text_ids"].extend(shifted_text_ids)
         self.sample["packed_text_indexes"].extend(range(curr, curr + len(shifted_text_ids)))
 
         if item_loss == 1:
-            loss_token_shift = 0 
+            loss_token_shift = 0
             self.sample["ce_loss_indexes"].extend(range(curr - loss_token_shift, curr + len(shifted_text_ids)))
             self.sample["ce_loss_weights"].extend([len2weight(len(shifted_text_ids) + loss_token_shift)] * (len(shifted_text_ids) + loss_token_shift))
-            self.sample["packed_label_ids"].extend(text_ids + [self.eos_token_id]) 
+            self.sample["packed_label_ids"].extend(text_ids + [self.eos_token_id])
         curr += len(shifted_text_ids)
         curr_split_len += len(shifted_text_ids)
 
@@ -341,13 +340,13 @@ class ValidationDataset(Dataset):
     def process_vae_video(self, video_tensor, curr: int, curr_rope_id: int, curr_split_len: int, curr_video_grid_thw: None, video_sizes: list, item_loss=0):
         if not self.data_config.text_template:
             num_special_tokens = 0
-            self.sample["packed_text_ids"].append(self.start_of_image)  
+            self.sample["packed_text_ids"].append(self.start_of_image)
             self.sample["packed_text_indexes"].append(curr)
             curr += 1
             curr_split_len += 1
             num_special_tokens += 1
 
-        if isinstance(video_tensor, torch.Tensor):  
+        if isinstance(video_tensor, torch.Tensor):
             self.sample["vae_video_tensors"].append(video_tensor)
             _, T, H, W = video_tensor.shape
             _T, _H, _W = self.data_config.vae_downsample
@@ -392,7 +391,7 @@ class ValidationDataset(Dataset):
                     mse_loss_indexes = sorted(list(set(mse_loss_indexes) - set(frame_condition_indexes)))
 
                 if not self.data_config.text_template:
-                    self.sample["mse_loss_indexes"].extend(mse_loss_indexes) 
+                    self.sample["mse_loss_indexes"].extend(mse_loss_indexes)
             else:
                 timestep = float("-inf")
                 packed_timesteps = [timestep] * num_vid_tokens
@@ -406,7 +405,7 @@ class ValidationDataset(Dataset):
                 self.sample["packed_text_ids"].extend([self.image_token_id] * num_vid_tokens)
 
                 # add <|endofimage|> token
-                self.sample["packed_text_ids"].append(self.end_of_image)  
+                self.sample["packed_text_ids"].append(self.end_of_image)
                 self.sample["packed_text_indexes"].append(curr)
                 curr += 1
                 curr_split_len += 1
@@ -534,18 +533,18 @@ class ValidationDataset(Dataset):
         self.sample["split_lens"].append(split_len_prefix)
         curr_rope_id += split_len_prefix
 
-        self.sample["packed_text_ids"].append(self.start_of_image)  
+        self.sample["packed_text_ids"].append(self.start_of_image)
         self.sample["packed_text_indexes"].append(curr)
         curr += 1
         split_len_vision_token = 1
 
-        if isinstance(vit_video_tensor, torch.Tensor): 
+        if isinstance(vit_video_tensor, torch.Tensor):
             self.sample["vit_video_tensors"].append(vit_video_tensor)
 
             # preprocess video
             vit_tokens = patchify_video_with_merge(
                 vit_video_tensor, self.data_config.vit_patch_size, self.data_config.vit_patch_size_temporal
-            )  
+            )
             num_video_tokens = vit_tokens.shape[0] // 4
             t, h, w = vit_video_tensor.size(1), vit_video_tensor.size(2), vit_video_tensor.size(3)
 
@@ -557,7 +556,7 @@ class ValidationDataset(Dataset):
                 t // self.data_config.vit_patch_size_temporal,
                 h // self.data_config.vit_patch_size,
                 w // self.data_config.vit_patch_size,
-            ]  
+            ]
         self.sample["vit_video_grid_thw"].append(vit_video_grid_thw)
         curr_video_grid_thw.append(vit_video_grid_thw)
 
@@ -574,7 +573,7 @@ class ValidationDataset(Dataset):
         self.sample["packed_text_ids"].extend([self.image_token_id] * num_video_tokens)
 
         # add a <|endofimage|> token
-        self.sample["packed_text_ids"].append(self.end_of_image) 
+        self.sample["packed_text_ids"].append(self.end_of_image)
         self.sample["packed_text_indexes"].append(curr)
         curr += 1
         split_len_vision_token += 1
@@ -605,7 +604,7 @@ class ValidationDataset(Dataset):
 
         self.sample["ce_loss_indexes"].extend(range(curr, curr + len(shifted_text_ids_answer)))
         self.sample["ce_loss_weights"].extend([len2weight(len(shifted_text_ids_answer))] * (len(shifted_text_ids_answer)))
-        self.sample["packed_label_ids"].extend(shifted_text_ids_answer)  
+        self.sample["packed_label_ids"].extend(shifted_text_ids_answer)
 
         curr += len(shifted_text_ids_answer)
         split_len_answer = len(shifted_text_ids_answer)
@@ -665,7 +664,7 @@ class ValidationDataset(Dataset):
         user_prompt = sample["user_prompt"]
         answer = sample["gt"]
         image_path = sample["image_path"]
-        vit_image_tensor = self.get_video_tensor_online(image_path, vision_stream="vit_video", element_dtype="image") 
+        vit_image_tensor = self.get_video_tensor_online(image_path, vision_stream="vit_video", element_dtype="image")
 
         sample_lens, curr_video_grid_thw = self.process_und_template(
             system_prompt=system_prompt,
@@ -720,7 +719,7 @@ class ValidationDataset(Dataset):
             text_ids = self.tokenizer.encode(user_prompt)
             text_ids = [self.new_token_ids["bos_token_id"]] + text_ids + [self.new_token_ids["eos_token_id"]]
             text_split_len = len(text_ids)
-            packed_text_indexes.extend(range(0, text_split_len))  
+            packed_text_indexes.extend(range(0, text_split_len))
             packed_position_ids.extend(range(0, text_split_len))
             sample_modality.extend([modality_map['text']] * text_split_len)
 
@@ -785,19 +784,19 @@ class ValidationDataset(Dataset):
     def tv2v_sample(self, idx: int) -> Dict[str, Any]:
         sample = self.data[idx]
         user_prompt = "Create a 2D animation based on the provided image of a maze. The blue star slides smoothly along the white path, stopping perfectly on the red flag and then acquiring a trophy. The blue star never slides or crosses into the black segments of the maze. The camera is a static, top-down view showing the entire maze."
-        
+
         sample["data"] = {
             "interleave_array": [user_prompt, sample["image_path"], sample["image_path"], sample["video_path"]],
             "element_dtype_array": ["text", "image", "image", "video"],
             "istarget_in_interleave": [0, 0, 0, 1]
         }
-        
+
         self.sample_task = 'edit'
         result = self.tiv2v_sample(idx)
-        
+
         result["caption"] = user_prompt
         result["caption_cn"] = user_prompt
-        
+
         return result
 
     def tiv2v_sample(self, idx: int) -> Dict[str, Any]:
@@ -807,8 +806,8 @@ class ValidationDataset(Dataset):
         sample = self.data[idx]
 
         index = sample["index"]
-        data_sample = sample["data"] 
-        additional_info = sample["data"]["additional_info"] if "additional_info" in sample["data"] else [] 
+        data_sample = sample["data"]
+        additional_info = sample["data"]["additional_info"] if "additional_info" in sample["data"] else []
 
         interleave_array, element_dtype_array, istarget_in_interleave = data_sample["interleave_array"], data_sample["element_dtype_array"], data_sample["istarget_in_interleave"]
 
@@ -825,7 +824,7 @@ class ValidationDataset(Dataset):
                     sample_modality.extend([modality_map['text']] * curr_split_len)
             elif element_dtype in ["image", "video"]:
                 if is_target == 0:
-                    vit_image_tensor = self.get_video_tensor_online(element, vision_stream="vit_video", element_dtype=element_dtype)  
+                    vit_image_tensor = self.get_video_tensor_online(element, vision_stream="vit_video", element_dtype=element_dtype)
                     self.sample, curr, curr_rope_id, curr_split_len, curr_video_grid_thw, num_tokens_ = self.process_vit_video(
                         vit_image_tensor, curr=curr, curr_rope_id=curr_rope_id, curr_split_len=0, curr_video_grid_thw=curr_video_grid_thw, item_loss=0
                         )
@@ -838,7 +837,7 @@ class ValidationDataset(Dataset):
                         sample_modality.extend([modality_map['ref_vit']] * curr_split_len)
 
                 # vae condition/target processing
-                vae_image_tensor = self.get_video_tensor_online(element, vision_stream="vae_video", element_dtype=element_dtype)  
+                vae_image_tensor = self.get_video_tensor_online(element, vision_stream="vae_video", element_dtype=element_dtype)
                 self.sample, curr, curr_rope_id, curr_split_len, curr_video_grid_thw, video_sizes, num_tokens_ = self.process_vae_video(
                     vae_image_tensor, curr=curr, curr_rope_id=curr_rope_id, curr_split_len=0, curr_video_grid_thw=curr_video_grid_thw, video_sizes=video_sizes, item_loss=is_target
                 )
@@ -859,7 +858,7 @@ class ValidationDataset(Dataset):
 
         if self.data_config.text_template:
             if text_template_user[0]['type']=='text':
-                text_template_user = text_template_user[1:] + text_template_user[:1] 
+                text_template_user = text_template_user[1:] + text_template_user[:1]
             caption_instruction = generate_system_prompt(system_prompt_type=self.data_config.task, vision_type=element_dtype)
             all_token_id, spans_index, tgt_index, search_index = self.render_template(caption_instruction, text_template_assistant, text_template_user, vit_num_tokens, search_text=search_text)
             self.sample, curr, curr_rope_id, curr_split_len = self.process_text_template(
@@ -922,7 +921,7 @@ class ValidationDataset(Dataset):
         sample_lens = 0
         sample = self.data[idx]
         index = sample["index"]
-        data_sample = sample["data"] 
+        data_sample = sample["data"]
 
         interleave_array, element_dtype_array, istarget_in_interleave = data_sample["interleave_array"], data_sample["element_dtype_array"], data_sample["istarget_in_interleave"]
 
@@ -949,7 +948,7 @@ class ValidationDataset(Dataset):
 
                         caption_i, caption_q, caption_a = element[0], element[1], element[2]
 
-                        text_template_assistant.append({"type": "text", "text": caption_a}) 
+                        text_template_assistant.append({"type": "text", "text": caption_a})
                         if caption_q != "":
                             text_template_user.append({"type": "text", "text": caption_q})
 
@@ -978,11 +977,11 @@ class ValidationDataset(Dataset):
                         sample_lens += curr_split_len
                         sample_modality.extend([modality_map["text"]] * curr_split_len)
                         caption_all += element
-                        caption_answer = element  
+                        caption_answer = element
 
             elif element_dtype in ["image", "video"]:
 
-                vit_image_tensor = self.get_video_tensor_online(element, vision_stream="vit_video", element_dtype=element_dtype)  
+                vit_image_tensor = self.get_video_tensor_online(element, vision_stream="vit_video", element_dtype=element_dtype)
                 self.sample, curr, curr_rope_id, curr_split_len, curr_video_grid_thw, num_tokens_ = self.process_vit_video(
                     vit_image_tensor, curr=curr, curr_rope_id=curr_rope_id, curr_split_len=0, curr_video_grid_thw=curr_video_grid_thw, item_loss=0
                 )

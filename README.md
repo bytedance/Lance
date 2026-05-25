@@ -116,6 +116,13 @@ We are actively updating and improving this repository. If you find any bugs or 
 - **Software:** Python 3.10+, CUDA 12.4+ (required)
 - **Hardware:** A GPU with at least 40GB VRAM is required for inference
 
+We have tested the following dependency combinations on NVIDIA A100:
+
+- PyTorch 2.8.0 + cu126 + flash-attn 2.8.3
+- PyTorch 2.5.1 + cu124 + flash-attn 2.6.3
+
+The default `requirements.txt` uses the PyTorch 2.8.0 + cu126 setup. For other GPU models, please choose and validate a PyTorch build and a matching `flash-attn` version according to your driver, CUDA runtime, Python version, and GPU architecture.
+
 ### Installation Steps
 
 First, clone the repository:

@@ -22,7 +22,7 @@
       "assets/video-understanding/videos/video-understanding-caption-short-01.mp4",
       [
         "Watch the video carefully and answer the question.",
-        "Offer a account of the culinary process shown in this video.",
+        "Offer an account of the culinary process shown in this video.",
         "Add tomato puree and mix it well with chicken pieces."
       ]
     ],
@@ -35,12 +35,12 @@
       1
     ]
   },
-  "00036": {
+  "0003": {
     "interleave_array": [
       "assets/video-understanding/videos/video-understanding-caption-long-01.mp4",
       [
         "Watch the video carefully and answer the question.",
-        "Offer a account of the  behavioral process shown in this video.",
+        "Offer an account of the behavioral process shown in this video.",
         "In a sunlit meadow, a small tortoiseshell butterfly rests on a purple flower. A bee, with black and yellow stripes, lands on the same flower. The butterfly flaps its wings gently, while the bee busies itself, collecting nectar. The flower sways slightly in the breeze. The butterfly then takes off, and the bee follows, both heading to the next flower. The scene is a vivid display of insect interaction in a natural setting, with the colors of the butterfly and the bee contrasting against the green background of the meadow. The video captures this peaceful moment in a short 6-second duration."
       ]
     ],

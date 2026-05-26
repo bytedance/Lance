@@ -48,6 +48,17 @@ We are actively updating and improving this repository. If you find any bugs or 
   <img src="assets/benchmarks/benchmark-overview.png" alt="Lance benchmark overview across image generation, image editing, video generation, and video understanding" width="980">
 </div>
 
+
+## 🔥 Updates
+- **`2026/05/26`**: 🎨 We support image and video generation, editing, and understanding in the Gradio interface. [Have fun](assets/docs/changelog/2026-05-26.md)!
+- **`2026/05/25`**: ✨ We support the [HuggingFace Space](https://huggingface.co/spaces/bytedance-research/Lance), thanks to the HF team and [Gradio](https://github.com/gradio-app/gradio)!
+- **`2026/05/19`**: 🤗 We released the technical report on [arXiv](http://arxiv.org/abs/2605.18678). 
+- **`2026/05/18`**: 🔥 We released the [project homepage](https://lance-project.github.io/), along with the initial version of the inference code and model weights on [GitHub](https://github.com/bytedance/Lance/) and [Hugging Face](https://huggingface.co/bytedance-research/Lance). Lance supports image and video generation, editing, and understanding.
+
+## 📅 TODO
+- [ ] Release the fine-tuning code.
+- [ ] Add support for image-to-video generation code.
+
 ## 🎨 Demo
 
 <details>
@@ -287,8 +298,12 @@ You can configure the following hyperparameters at the top of the `inference_lan
 | `RESOLUTION` | `"video_480p"` | Base resolution preset (`image_768res` or `video_480p`). |
 
 ### Gradio
+
+Launch the local Gradio demo with support for video/image generation, editing, and understanding:
+
+
 ```bash
-python lance_gradio_t2v_v2t.py --gpus 0 --server-port 7860
+python3 lance_gradio.py --server-name 0.0.0.0 --server-port 7860  
 ```
 
 ### Benchmarks

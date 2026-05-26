@@ -48,6 +48,12 @@
   <img src="assets/benchmarks/benchmark-overview.png" alt="Lance benchmark overview across image generation, image editing, video generation, and video understanding" width="980">
 </div>
 
+## 🔥 更新
+- **`2026/05/26`**: 🎨 Gradio 界面已支持图像和视频生成、编辑与理解任务。[欢迎体验](assets/docs/changelog/2026-05-26.md)！
+- **`2026/05/25`**: ✨ 我们上线了 [HuggingFace Space](https://huggingface.co/spaces/bytedance-research/Lance)，感谢 HF 团队和 [Gradio](https://github.com/gradio-app/gradio) 的支持！
+- **`2026/05/19`**: 🤗 我们在 [arXiv](http://arxiv.org/abs/2605.18678) 发布了技术报告。
+- **`2026/05/18`**: 🔥 我们发布了 [项目主页](https://lance-project.github.io/)，并在 [GitHub](https://github.com/bytedance/Lance/) 和 [Hugging Face](https://huggingface.co/bytedance-research/Lance) 上开源了初版推理代码和模型权重。Lance 支持图像和视频生成、编辑与理解。
+
 ## 🎨 演示
 
 <details>
@@ -287,8 +293,11 @@ bash inference_lance.sh \
 | `RESOLUTION` | `"video_480p"` | 基础分辨率预设（如 `image_768res` 或 `video_480p`）。 |
 
 ### Gradio
+
+启动本地 Gradio demo，可在统一界面中体验视频/图像生成、编辑和理解：
+
 ```bash
-python lance_gradio_t2v_v2t.py --gpus 0 --server-port 7860
+python3 lance_gradio.py --server-name 0.0.0.0 --server-port 7860
 ```
 
 ### 基准评测

@@ -35,6 +35,13 @@
 
 > **注意：** Lance 是一个研究项目，而不是经过充分产品化打磨的模型。当前开源 checkpoint 使用不超过 128 张 A100 GPU 训练，训练阶段覆盖到 768x768 图像生成和 480p、12 FPS 视频生成。我们希望将 Lance 作为一个研究参考，分享在较小模型规模和相对有限算力下统一图像/视频理解、生成和编辑的建模思路、训练流程和推理代码。模型效果可能会随 prompt、分辨率、时长、运动复杂度和编辑场景而波动，post-training recipe 仍有进一步改进空间。我们欢迎社区提供建设性反馈，帮助项目持续改进。
 
+## 🔥 更新
+
+- **`2026/05/26`**: 🎨 Gradio 界面已支持图像和视频生成、编辑与理解任务。[欢迎体验](assets/docs/changelog/2026-05-26.md)！
+- **`2026/05/25`**: ✨ 我们上线了 [HuggingFace Space](https://huggingface.co/spaces/bytedance-research/Lance)，感谢 HF 团队的支持！
+- **`2026/05/19`**: 🤗 我们在 [arXiv](http://arxiv.org/abs/2605.18678) 发布了技术报告。
+- **`2026/05/18`**: 🔥 我们发布了 [项目主页](https://lance-project.github.io/)，并在 [GitHub](https://github.com/bytedance/Lance/) 和 [Hugging Face](https://huggingface.co/bytedance-research/Lance) 上开源了初版推理代码和模型权重。Lance 支持图像和视频生成、编辑与理解。
+
 ## 🌟 亮点
 
 **Lance** 是一个3B参数、原生统一的多模态模型，在单一框架下同时支持 **图像与视频的理解、生成和编辑**。
@@ -48,11 +55,10 @@
   <img src="assets/benchmarks/benchmark-overview.png" alt="Lance benchmark overview across image generation, image editing, video generation, and video understanding" width="980">
 </div>
 
-## 🔥 更新
-- **`2026/05/26`**: 🎨 Gradio 界面已支持图像和视频生成、编辑与理解任务。[欢迎体验](assets/docs/changelog/2026-05-26.md)！
-- **`2026/05/25`**: ✨ 我们上线了 [HuggingFace Space](https://huggingface.co/spaces/bytedance-research/Lance)，感谢 HF 团队和 [Gradio](https://github.com/gradio-app/gradio) 的支持！
-- **`2026/05/19`**: 🤗 我们在 [arXiv](http://arxiv.org/abs/2605.18678) 发布了技术报告。
-- **`2026/05/18`**: 🔥 我们发布了 [项目主页](https://lance-project.github.io/)，并在 [GitHub](https://github.com/bytedance/Lance/) 和 [Hugging Face](https://huggingface.co/bytedance-research/Lance) 上开源了初版推理代码和模型权重。Lance 支持图像和视频生成、编辑与理解。
+## 📅 路线图
+
+- [ ] 发布 fine-tuning 代码。
+- [ ] 增加 image-to-video generation 代码支持。
 
 ## 🎨 演示
 

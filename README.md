@@ -35,6 +35,13 @@
 
 > **Note:** Lance is a research project rather than a polished product model. The released checkpoint was trained with up to 128 A100 GPUs, with training conducted up to 768x768 image generation and 480p, 12 FPS video generation. Our goal is to share a research artifact for studying unified image/video understanding, generation, and editing under a relatively small model and limited compute budget. Output quality may vary across prompts, resolutions, duration, motion complexity, and editing scenarios, and we see further opportunities to improve the post-training recipe. We appreciate constructive feedback from the community as we continue improving the project.
 
+## 🔥 Updates
+
+- **`2026/05/26`**: 🎨 We support image and video generation, editing, and understanding in the Gradio interface. [Have fun](assets/docs/changelog/2026-05-26.md)!
+- **`2026/05/25`**: ✨ We support the [HuggingFace Space](https://huggingface.co/spaces/bytedance-research/Lance), thanks to the HF team!
+- **`2026/05/19`**: 🤗 We released the technical report on [arXiv](http://arxiv.org/abs/2605.18678).
+- **`2026/05/18`**: 🔥 We released the [project homepage](https://lance-project.github.io/), along with the initial version of the inference code and model weights on [GitHub](https://github.com/bytedance/Lance/) and [Hugging Face](https://huggingface.co/bytedance-research/Lance). Lance supports image and video generation, editing, and understanding.
+
 ## 🌟 Highlights
 
 **Lance** is a 3B native unified multimodal model that supports **image and video understanding, generation, and editing** within a single framework.
@@ -48,14 +55,8 @@ We are actively updating and improving this repository. If you find any bugs or 
   <img src="assets/benchmarks/benchmark-overview.png" alt="Lance benchmark overview across image generation, image editing, video generation, and video understanding" width="980">
 </div>
 
+## 📅 Roadmap
 
-## 🔥 Updates
-- **`2026/05/26`**: 🎨 We support image and video generation, editing, and understanding in the Gradio interface. [Have fun](assets/docs/changelog/2026-05-26.md)!
-- **`2026/05/25`**: ✨ We support the [HuggingFace Space](https://huggingface.co/spaces/bytedance-research/Lance), thanks to the HF team and [Gradio](https://github.com/gradio-app/gradio)!
-- **`2026/05/19`**: 🤗 We released the technical report on [arXiv](http://arxiv.org/abs/2605.18678). 
-- **`2026/05/18`**: 🔥 We released the [project homepage](https://lance-project.github.io/), along with the initial version of the inference code and model weights on [GitHub](https://github.com/bytedance/Lance/) and [Hugging Face](https://huggingface.co/bytedance-research/Lance). Lance supports image and video generation, editing, and understanding.
-
-## 📅 TODO
 - [ ] Release the fine-tuning code.
 - [ ] Add support for image-to-video generation code.
 
@@ -303,7 +304,7 @@ Launch the local Gradio demo with support for video/image generation, editing, a
 
 
 ```bash
-python3 lance_gradio.py --server-name 0.0.0.0 --server-port 7860  
+python3 lance_gradio.py --server-name 0.0.0.0 --server-port 7860
 ```
 
 ### Benchmarks

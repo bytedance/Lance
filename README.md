@@ -37,10 +37,10 @@
 
 ## 🔥 Updates
 
-- **`2026/05/26`**: 🎨 We support image and video generation, editing, and understanding in the Gradio interface. [Have fun](assets/docs/changelog/2026-05-26.md)!
-- **`2026/05/25`**: ✨ We support the [HuggingFace Space](https://huggingface.co/spaces/bytedance-research/Lance), thanks to the HF team!
-- **`2026/05/19`**: 🤗 We released the technical report on [arXiv](http://arxiv.org/abs/2605.18678).
-- **`2026/05/18`**: 🔥 We released the [project homepage](https://lance-project.github.io/), along with the initial version of the inference code and model weights on [GitHub](https://github.com/bytedance/Lance/) and [Hugging Face](https://huggingface.co/bytedance-research/Lance). Lance supports image and video generation, editing, and understanding.
+- **`2026/05/26`**: 🎨 The Gradio interface now supports image and video generation, editing, and understanding. [Try it out](assets/docs/changelog/2026-05-26.md)!
+- **`2026/05/25`**: ✨ The [Hugging Face Space](https://huggingface.co/spaces/bytedance-research/Lance) is now live, thanks to the HF team!
+- **`2026/05/19`**: 🤗 The technical report is now available on [arXiv](http://arxiv.org/abs/2605.18678).
+- **`2026/05/18`**: 🔥 We launched the [project homepage](https://lance-project.github.io/) and released the initial inference code and model weights on [GitHub](https://github.com/bytedance/Lance/) and [Hugging Face](https://huggingface.co/bytedance-research/Lance).
 
 ## 🌟 Highlights
 

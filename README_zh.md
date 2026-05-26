@@ -37,10 +37,10 @@
 
 ## 🔥 更新
 
-- **`2026/05/26`**: 🎨 Gradio 界面已支持图像和视频生成、编辑与理解任务。[欢迎体验](assets/docs/changelog/2026-05-26.md)！
-- **`2026/05/25`**: ✨ 我们上线了 [HuggingFace Space](https://huggingface.co/spaces/bytedance-research/Lance)，感谢 HF 团队的支持！
-- **`2026/05/19`**: 🤗 我们在 [arXiv](http://arxiv.org/abs/2605.18678) 发布了技术报告。
-- **`2026/05/18`**: 🔥 我们发布了 [项目主页](https://lance-project.github.io/)，并在 [GitHub](https://github.com/bytedance/Lance/) 和 [Hugging Face](https://huggingface.co/bytedance-research/Lance) 上开源了初版推理代码和模型权重。Lance 支持图像和视频生成、编辑与理解。
+- **`2026/05/26`**: 🎨 Gradio 界面现已支持图像和视频生成、编辑与理解任务。[欢迎体验](assets/docs/changelog/2026-05-26.md)！
+- **`2026/05/25`**: ✨ [Hugging Face Space](https://huggingface.co/spaces/bytedance-research/Lance) 已上线，感谢 HF 团队的支持！
+- **`2026/05/19`**: 🤗 技术报告现已发布于 [arXiv](http://arxiv.org/abs/2605.18678)。
+- **`2026/05/18`**: 🔥 我们发布了 [项目主页](https://lance-project.github.io/)，并在 [GitHub](https://github.com/bytedance/Lance/) 和 [Hugging Face](https://huggingface.co/bytedance-research/Lance) 上开源了初版推理代码和模型权重。
 
 ## 🌟 亮点
 

@@ -266,6 +266,9 @@ bash inference_lance.sh \
   --SAVE_PATH_GEN results/x2t_image
 ```
 
+<details>
+<summary><strong>展开任务和参数参考</strong></summary>
+
 #### 可用任务
 
 | 任务名 | 说明 | 示例 JSON |
@@ -298,9 +301,11 @@ bash inference_lance.sh \
 | `VIDEO_HEIGHT` / `VIDEO_WIDTH`| `768` | 空间分辨率。*编辑任务不使用该参数（由输入图像/视频决定）。* |
 | `RESOLUTION` | `"video_480p"` | 基础分辨率预设（如 `image_768res` 或 `video_480p`）。 |
 
-### Gradio
+</details>
 
-启动本地 Gradio demo，可在统一界面中体验视频/图像生成、编辑和理解：
+### 🖥️ Gradio
+
+你可以启动本地 Gradio demo，体验视频/图像生成、编辑和理解：
 
 ```bash
 python3 lance_gradio.py --server-name 0.0.0.0 --server-port 7860

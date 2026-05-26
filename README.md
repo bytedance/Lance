@@ -266,6 +266,9 @@ bash inference_lance.sh \
   --SAVE_PATH_GEN results/x2t_image
 ```
 
+<details>
+<summary><strong>Show task and parameter reference</strong></summary>
+
 #### Available Tasks
 
 | Task Name              | Description                                      | Example JSON                                 |
@@ -298,10 +301,11 @@ You can configure the following hyperparameters at the top of the `inference_lan
 | `VIDEO_HEIGHT` / `VIDEO_WIDTH`| `768` | Spatial resolution. *Unused for editing tasks (determined by input image/video).* |
 | `RESOLUTION` | `"video_480p"` | Base resolution preset (`image_768res` or `video_480p`). |
 
-### Gradio
+</details>
 
-Launch the local Gradio demo with support for video/image generation, editing, and understanding:
+### 🖥️ Gradio
 
+You can launch the local Gradio demo for video/image generation, editing, and understanding:
 
 ```bash
 python3 lance_gradio.py --server-name 0.0.0.0 --server-port 7860

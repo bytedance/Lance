@@ -308,7 +308,7 @@ You can configure the following hyperparameters at the top of the `inference_lan
 You can launch the local Gradio demo for video/image generation, editing, and understanding:
 
 ```bash
-python3 lance_gradio.py --server-name 0.0.0.0 --server-port 7860
+python lance_gradio.py --server-name 0.0.0.0 --server-port 7860
 ```
 
 ### Benchmarks
@@ -612,7 +612,7 @@ Ready-to-run benchmark scripts are provided under `benchmarks/`:
 
 ## 📄 License
 
-Copyright 2025 Bytedance Ltd. and/or its affiliates.
+Copyright 2025 ByteDance Ltd. and/or its affiliates.
 
 ## 🙏 Acknowledgements
 

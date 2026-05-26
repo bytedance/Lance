@@ -308,7 +308,7 @@ bash inference_lance.sh \
 你可以启动本地 Gradio demo，体验视频/图像生成、编辑和理解：
 
 ```bash
-python3 lance_gradio.py --server-name 0.0.0.0 --server-port 7860
+python lance_gradio.py --server-name 0.0.0.0 --server-port 7860
 ```
 
 ### 基准评测
@@ -612,7 +612,7 @@ python3 lance_gradio.py --server-name 0.0.0.0 --server-port 7860
 
 ## 📄 许可证
 
-Copyright 2025 Bytedance Ltd. and/or its affiliates.
+Copyright 2025 ByteDance Ltd. and/or its affiliates.
 
 ## 🙏 致谢
 

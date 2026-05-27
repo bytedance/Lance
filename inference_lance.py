@@ -150,6 +150,29 @@ def clean_memory(*objects):
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+
+
+def cuda_memory_logging_enabled() -> bool:
+    return os.getenv("LANCE_LOG_CUDA_MEMORY", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def log_cuda_memory(tag: str, device: int = 0, reset_peak: bool = False) -> None:
+    if not cuda_memory_logging_enabled() or not torch.cuda.is_available():
+        return
+    with torch.cuda.device(device):
+        torch.cuda.synchronize(device)
+        if reset_peak:
+            torch.cuda.reset_peak_memory_stats(device)
+        mib = 1024 ** 2
+        print(
+            f"[cuda_mem][gpu:{device}][{tag}] "
+            f"allocated={torch.cuda.memory_allocated(device) / mib:.0f}MiB "
+            f"reserved={torch.cuda.memory_reserved(device) / mib:.0f}MiB "
+            f"max_allocated={torch.cuda.max_memory_allocated(device) / mib:.0f}MiB "
+            f"max_reserved={torch.cuda.max_memory_reserved(device) / mib:.0f}MiB",
+            flush=True,
+        )
 
 
 def apply_inference_defaults(
@@ -258,16 +281,33 @@ def validate_on_fixed_batch(
     save_path_gen: str = "",
     save_path_gt: str = "",
 ):
+    log_cuda_memory("validate:start", device, reset_peak=True)
     val_data = val_data_cpu.cuda(device).to_dict()
+    log_cuda_memory("validate:after_val_data_cuda", device)
     fsdp_model = fsdp_model.to(device=device, dtype=torch.bfloat16)
+    log_cuda_memory("validate:after_model_to_device", device)
+    offload_vae_during_denoise = bool(getattr(inference_args, "offload_vae_during_denoise", False))
+    vae_was_offloaded = False
 
     with torch.no_grad(), torch.amp.autocast("cuda", enabled=True, dtype=torch.bfloat16):
         # Compute padded_latent.
         if "padded_videos" in val_data.keys():
+            if vae_model is not None:
+                vae_model.to(torch.device("cuda", device))
+                log_cuda_memory("validate:after_vae_to_cuda", device)
             val_data["padded_latent"] = make_padded_latent(val_data["padded_videos"], val_data["vae_data_mode"], vae_model)
+            log_cuda_memory("validate:after_make_padded_latent", device)
+            if not save_source_video:
+                val_data.pop("padded_videos", None)
+            if offload_vae_during_denoise and vae_model is not None:
+                vae_model.to("cpu")
+                vae_was_offloaded = True
+            clean_memory()
+            log_cuda_memory("validate:after_vae_encode_cleanup", device)
 
         # -------------------- Generation branch --------------------
         if inference_args.task in GENERATION_TASKS:
+            save_fps = int(val_data.get("save_fps", 12))
             params = {
                 "val_packed_text_ids": val_data["packed_text_ids"],
                 "val_packed_text_indexes": val_data["packed_text_indexes"],
@@ -308,11 +348,18 @@ def validate_on_fixed_batch(
                 "val_padded_videos": val_data["padded_videos"] if save_source_video else None,
             }
             if inference_args.use_KVcache:
+                log_cuda_memory("validate:before_denoise_kvcache", device)
                 denoise_latent, captions, padded_videos, index = fsdp_model.validation_gen_KVcache(**params)
             else:
+                log_cuda_memory("validate:before_denoise_full_attention", device)
                 denoise_latent, captions, padded_videos, index = fsdp_model.validation_gen(**params)
+            log_cuda_memory("validate:after_denoise", device)
 
             # Decode.
+            if vae_was_offloaded and vae_model is not None:
+                vae_model.to(torch.device("cuda", device))
+                clean_memory()
+                log_cuda_memory("validate:after_vae_reload_for_decode", device)
             for i_val, latent in enumerate(denoise_latent):
                 if inference_args.task in {TASK_IMAGE_EDIT, TASK_VIDEO_EDIT}:
                     target_latents = [latent[-1]]
@@ -324,7 +371,7 @@ def validate_on_fixed_batch(
                     v_list.append(vae_model.vae_decode([latent_])[0])
 
                 save_item_name = f"{index:06d}" if isinstance(index, int) else index
-                v_thwc = decode_video_tensor(v_list, save_path=save_path_gen, save_half=False, save_item_name=save_item_name)
+                v_thwc = decode_video_tensor(v_list, save_path=save_path_gen, save_half=False, save_item_name=save_item_name, save_fps=save_fps)
 
                 if v_thwc.shape[0] > 1:
                     prompt_data_path = f"{save_item_name}.mp4"
@@ -334,14 +381,18 @@ def validate_on_fixed_batch(
 
                 if save_source_video:
                     curr_padded_videos = padded_videos[i_val * 2 : (i_val + 1) * 2]
-                    v_thwc_gt = decode_video_tensor(curr_padded_videos[-1:], save_path=save_path_gt, save_item_name=save_item_name)
+                    v_thwc_gt = decode_video_tensor(curr_padded_videos[-1:], save_path=save_path_gt, save_item_name=save_item_name, save_fps=save_fps)
                     del curr_padded_videos, v_thwc_gt
 
                 del v_list, v_thwc, latent, target_latents
                 clean_memory()
+                log_cuda_memory("validate:after_decode_item", device)
 
             del denoise_latent, captions, padded_videos, params
+            if offload_vae_during_denoise and vae_model is not None:
+                vae_model.to("cpu")
             clean_memory()
+            log_cuda_memory("validate:after_generation_cleanup", device)
 
         elif inference_args.task in UNDERSTANDING_TASKS:
             params = {
@@ -384,9 +435,11 @@ def validate_on_fixed_batch(
 
             del generated_sequence_all, captions, params
             clean_memory()
+            log_cuda_memory("validate:after_understanding_cleanup", device)
 
     del val_data
     clean_memory()
+    log_cuda_memory("validate:end", device)
 
 
 def main():

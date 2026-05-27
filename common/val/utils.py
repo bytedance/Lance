@@ -47,7 +47,7 @@ def pad_video_list(video_tensor):  # video_tensor: List[Tensor], 每个Tensor的
     return padded_videos_latent
 
 
-def decode_video_tensor(video_tensor, video_type="vae", save_path="", save_half=False, idx="", max_save_num=100000, save_item_name=""):
+def decode_video_tensor(video_tensor, video_type="vae", save_path="", save_half=False, idx="", max_save_num=100000, save_item_name="", save_fps=12):
     # video_tensor: list [N], 每一项为[C T H W]
     # video_type: vae, vit
     N_target = len(video_tensor)
@@ -74,7 +74,7 @@ def decode_video_tensor(video_tensor, video_type="vae", save_path="", save_half=
             if len(existing_files) > max_save_num:
                 quit()
             save_path_i = f"{save_path}/{save_item_name}.mp4"
-            imageio.mimsave(save_path_i, v_thwc_save, fps=12, format="mp4")
+            imageio.mimsave(save_path_i, v_thwc_save, fps=save_fps, format="mp4")
         else:  # 保存图像
             existing_files = glob.glob(f"{save_path}/*.png")
             if len(existing_files) > max_save_num:

@@ -175,6 +175,17 @@ def log_cuda_memory(tag: str, device: int = 0, reset_peak: bool = False) -> None
         )
 
 
+def move_vae_model(vae_model: Optional[WanVideoVAE], device) -> None:
+    if vae_model is None or not hasattr(vae_model, "vae"):
+        return
+    target_device = torch.device(device)
+    vae_inner = vae_model.vae
+    if hasattr(vae_inner, "model"):
+        vae_inner.model.to(device=target_device, dtype=vae_model.dtype)
+    if hasattr(vae_inner, "scale"):
+        vae_inner.scale = [item.to(device=target_device) for item in vae_inner.scale]
+
+
 def apply_inference_defaults(
     model_args: ModelArguments,
     data_args: DataArguments,
@@ -293,14 +304,14 @@ def validate_on_fixed_batch(
         # Compute padded_latent.
         if "padded_videos" in val_data.keys():
             if vae_model is not None:
-                vae_model.to(torch.device("cuda", device))
+                move_vae_model(vae_model, torch.device("cuda", device))
                 log_cuda_memory("validate:after_vae_to_cuda", device)
             val_data["padded_latent"] = make_padded_latent(val_data["padded_videos"], val_data["vae_data_mode"], vae_model)
             log_cuda_memory("validate:after_make_padded_latent", device)
             if not save_source_video:
                 val_data.pop("padded_videos", None)
             if offload_vae_during_denoise and vae_model is not None:
-                vae_model.to("cpu")
+                move_vae_model(vae_model, "cpu")
                 vae_was_offloaded = True
             clean_memory()
             log_cuda_memory("validate:after_vae_encode_cleanup", device)
@@ -357,7 +368,7 @@ def validate_on_fixed_batch(
 
             # Decode.
             if vae_was_offloaded and vae_model is not None:
-                vae_model.to(torch.device("cuda", device))
+                move_vae_model(vae_model, torch.device("cuda", device))
                 clean_memory()
                 log_cuda_memory("validate:after_vae_reload_for_decode", device)
             for i_val, latent in enumerate(denoise_latent):
@@ -390,7 +401,7 @@ def validate_on_fixed_batch(
 
             del denoise_latent, captions, padded_videos, params
             if offload_vae_during_denoise and vae_model is not None:
-                vae_model.to("cpu")
+                move_vae_model(vae_model, "cpu")
             clean_memory()
             log_cuda_memory("validate:after_generation_cleanup", device)
 

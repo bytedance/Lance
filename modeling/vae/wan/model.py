@@ -43,7 +43,6 @@ class WanVideoVAE(object):
         self.logger = self.__class__.__logger__
 
         self.dtype = kwargs.get("dtype", torch.bfloat16)
-        self.device = torch.device(kwargs.get("device", get_device()))
         self.configure_vae_model()
         self.use_sample = kwargs.get("use_sample", True)
 
@@ -57,7 +56,7 @@ class WanVideoVAE(object):
         )
 
     def configure_vae_model(self):
-        device = self.device
+        device = get_device()
 
         # 从 path_default.yaml 读取 VAE 路径
         try:
@@ -71,15 +70,9 @@ class WanVideoVAE(object):
         # self.vae.requires_grad_(False).eval()
         # self.vae.to(device=get_device())
 
-    def to(self, device) -> "WanVideoVAE":
-        self.device = torch.device(device)
-        self.vae.model.to(device=self.device, dtype=self.dtype)
-        self.vae.scale = [item.to(device=self.device) for item in self.vae.scale]
-        return self
-
     @torch.no_grad()
     def vae_encode(self, samples: List[Tensor], **kwargs) -> List[Tensor]:
-        device = self.device
+        device = get_device()
 
         latents = []
         with torch.autocast(device_type="cuda", dtype=self.dtype):
@@ -99,7 +92,7 @@ class WanVideoVAE(object):
 
     @torch.no_grad()
     def vae_decode(self, latents: List[Tensor], **kwargs) -> List[Tensor]:
-        device = self.device
+        device = get_device()
 
         samples = []
         with torch.autocast(device_type="cuda", dtype=self.dtype):

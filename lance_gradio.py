@@ -17,6 +17,23 @@ os.environ.setdefault(
     os.getenv("LANCE_GRADIO_CUDA_ALLOC_CONF", "garbage_collection_threshold:0.8"),
 )
 
+def _sanitize_no_proxy_for_httpx() -> None:
+    for env_key in ("no_proxy", "NO_PROXY"):
+        value = os.environ.get(env_key)
+        if not value:
+            continue
+        safe_items = []
+        for item in value.split(","):
+            item = item.strip()
+            if not item:
+                continue
+            if ":" in item:
+                continue
+            safe_items.append(item)
+        os.environ[env_key] = ",".join(safe_items)
+
+_sanitize_no_proxy_for_httpx()
+
 from safetensors.torch import load_file
 import torch
 from transformers import set_seed
@@ -181,7 +198,7 @@ class LanceT2VV2TPipeline:
             if inference_args.visual_gen:
                 stage_start = time.perf_counter()
                 print(f"[startup][gpu:{self.device}] Initializing VAE", flush=True)
-                vae_model = WanVideoVAE(device=torch.device("cuda", self.device))
+                vae_model = WanVideoVAE()
                 vae_config = deepcopy(vae_model.vae_config)
                 self._log_stage("VAE init", stage_start)
             else:

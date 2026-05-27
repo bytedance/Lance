@@ -244,8 +244,8 @@ class ValidationDataset(Dataset):
             except Exception:
                 fps = 24
             frames_info = {
-                    "clip_indices": [(0, total_frames)],  
-                    "fps": fps,  
+                    "clip_indices": [(0, total_frames)],
+                    "fps": fps,
                 }
 
             frames_sampler_output: FrameSamplerOutput = self.frame_sampler(frames_info)

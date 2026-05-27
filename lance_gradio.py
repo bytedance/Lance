@@ -11,6 +11,7 @@ from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlsplit
 
 os.environ.setdefault(
     "PYTORCH_CUDA_ALLOC_CONF",
@@ -27,8 +28,13 @@ def _sanitize_no_proxy_for_httpx() -> None:
             item = item.strip()
             if not item:
                 continue
-            if ":" in item:
-                continue
+            if "://" in item:
+                parsed = urlsplit(item)
+                if not parsed.hostname:
+                    continue
+                item = parsed.hostname
+                if parsed.port is not None:
+                    item = f"{item}:{parsed.port}"
             safe_items.append(item)
         os.environ[env_key] = ",".join(safe_items)
 

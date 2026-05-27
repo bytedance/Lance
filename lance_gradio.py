@@ -52,7 +52,6 @@ from inference_lance import (
     apply_inference_defaults,
     clean_memory,
     init_from_model_path_if_needed,
-    log_cuda_memory,
     save_prompt_results,
     validate_on_fixed_batch,
 )
@@ -275,7 +274,6 @@ class LanceT2VV2TPipeline:
             model.eval()
             if vae_model is not None and hasattr(vae_model, "eval"):
                 vae_model.eval()
-            log_cuda_memory(f"gradio:{self.model_variant}:after_initialize", self.device)
 
             self.model = model
             self.vae_model = vae_model
@@ -313,7 +311,6 @@ class LanceT2VV2TPipeline:
                 with torch.cuda.device(self.device):
                     torch.cuda.empty_cache()
                     torch.cuda.ipc_collect()
-            log_cuda_memory(f"gradio:{self.model_variant}:after_unload", self.device)
 
     def _build_request_batch(
         self,
@@ -415,7 +412,6 @@ class LanceT2VV2TPipeline:
 
         with self._generate_lock:
             torch.cuda.set_device(self.device)
-            log_cuda_memory(f"gradio:{internal_task}:request_start", self.device, reset_peak=True)
             actual_seed = normalize_seed(int(seed))
             prompt_file = create_request_json(
                 task=internal_task,
@@ -449,7 +445,6 @@ class LanceT2VV2TPipeline:
             request_inference_args.task = internal_task
             request_inference_args.text_template = TEXT_TEMPLATE
             request_inference_args.prompt_data_dict = {}
-            request_inference_args.offload_vae_during_denoise = True
 
             try:
                 print(
@@ -485,7 +480,6 @@ class LanceT2VV2TPipeline:
                 elapsed = time.perf_counter() - generate_start
                 save_prompt_results(request_inference_args.prompt_data_dict, request_inference_args.save_path_gen, self.logger)
                 clean_memory()
-                log_cuda_memory(f"gradio:{internal_task}:request_after_cleanup", self.device)
 
                 video_path = find_generated_video(save_dir) if internal_task in {TASK_T2V, TASK_VIDEO_EDIT} else None
                 image_path = find_generated_image(save_dir) if internal_task in {TASK_T2I, TASK_IMAGE_EDIT} else None
@@ -621,7 +615,6 @@ class LanceT2VV2TPipeline:
                 }
                 save_generation_record(record, save_dir)
                 clean_memory()
-                log_cuda_memory(f"gradio:{internal_task}:request_after_exception_cleanup", self.device)
                 status = (
                     "Inference failed.\n\n"
                     f"- Task: `{internal_task}`\n"

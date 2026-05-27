@@ -14,7 +14,7 @@ from typing import Optional
 
 os.environ.setdefault(
     "PYTORCH_CUDA_ALLOC_CONF",
-    os.getenv("LANCE_GRADIO_CUDA_ALLOC_CONF", "max_split_size_mb:128,garbage_collection_threshold:0.8"),
+    os.getenv("LANCE_GRADIO_CUDA_ALLOC_CONF", "garbage_collection_threshold:0.8"),
 )
 
 from safetensors.torch import load_file

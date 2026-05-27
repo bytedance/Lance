@@ -309,7 +309,7 @@ bash inference_lance.sh \
 
 ```bash
 python lance_gradio.py --server-name 0.0.0.0 --server-port 7860
-
+```
 ### 基准评测
 
 <details>

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import concurrent.futures
 import gc
+import ipaddress
 import threading
 import time
 import traceback
@@ -11,7 +12,6 @@ from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlsplit
 
 os.environ.setdefault(
     "PYTORCH_CUDA_ALLOC_CONF",
@@ -28,13 +28,18 @@ def _sanitize_no_proxy_for_httpx() -> None:
             item = item.strip()
             if not item:
                 continue
-            if "://" in item:
-                parsed = urlsplit(item)
-                if not parsed.hostname:
-                    continue
-                item = parsed.hostname
-                if parsed.port is not None:
-                    item = f"{item}:{parsed.port}"
+            if "://" not in item and item.startswith("["):
+                end = item.find("]")
+                if end > 1:
+                    host = item[1:end]
+                    rest = item[end + 1:]
+                    is_bracketed_ipv6 = False
+                    try:
+                        is_bracketed_ipv6 = ipaddress.ip_address(host).version == 6
+                    except ValueError:
+                        pass
+                    if is_bracketed_ipv6 and (not rest or (rest.startswith(":") and rest[1:].isdigit())):
+                        item = host
             safe_items.append(item)
         os.environ[env_key] = ",".join(safe_items)
 

@@ -57,8 +57,8 @@ def get_flattened_position_ids_interpolate_video(num_frames, img_h, img_w, patch
 
 def get_flattened_position_ids_extrapolate_video(t, h, w, max_latent_size):
     """
-    默认情况下：
-        num_frames = 7 (对应 25 frames)
+    Defaults:
+        num_frames = 7 (corresponding to 25 frames)
         max_num_patches_per_side = 64
     """
     coords_t = torch.arange(0, t)
@@ -111,7 +111,7 @@ def patchify_video_with_merge(video, spatial_patch_size, temporal_patch_size, me
         video: Tensor of shape [C, T, H, W]
         spatial_patch_size: patch size for H/W
         temporal_patch_size: patch size for T
-        merge_size: merging factor for spatial grid (固定为 2)
+        merge_size: merging factor for spatial grid (fixed at 2)
 
     Returns:
         patches: Tensor of shape [num_patches, patch_dim]

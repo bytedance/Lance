@@ -49,7 +49,7 @@ from config.config_factory import ModelArguments, DataArguments, EvaluationArgum
 
 
 def init_from_model_path_if_needed(model: Qwen2ForCausalLM, model_args: ModelArguments):
-    # 统一从 model_path 加载训练好的 Lance checkpoint。
+    # Always load the trained Lance checkpoint from model_path.
     path_dir = model_args.model_path
     ema_path = osp.join(path_dir, "ema.safetensors")
     model_path = osp.join(path_dir, "model.safetensors")
@@ -176,36 +176,36 @@ def validate_on_fixed_batch(
     """
     验证逻辑，保持与原文件相同的保存格式
     """
-    # 检查是否初始化了分布式环境
+    # Check whether distributed execution has been initialized.
     if dist.is_initialized():
         is_rank0 = (dist.get_rank() == 0)
     else:
         is_rank0 = True
-    
+
     val_data = val_data_cpu.cuda(device).to_dict()
 
     with torch.no_grad(), torch.amp.autocast("cuda", enabled=True, dtype=torch.bfloat16):
-        # 计算 padded_latent
+        # Compute padded_latent.
         if "padded_videos" in val_data.keys():
             val_data["padded_latent"] = make_padded_latent(val_data["padded_videos"], val_data["vae_data_mode"], vae_model)
 
-        # 先根据val_data["index"]生成一个新的文件夹
+        # Create an output folder from val_data["index"] first.
         index_save = val_data["index"]
         index_save = f"{index_save:05d}"
         os.makedirs(os.path.join(save_path_gen, index_save), exist_ok=True)
         os.makedirs(os.path.join(save_path_gen, index_save, "samples"), exist_ok=True)
 
-        # 保存metadata.jsonl
+        # Save metadata.jsonl.
         metadata = val_data["additional_info"]
         with open(os.path.join(save_path_gen, index_save, "metadata.jsonl"), 'w') as f:
             f.write(json.dumps(metadata, ensure_ascii=False) + "\n")
 
-        # -------------------- GEN 分支 --------------------
+        # -------------------- GEN branch --------------------
         tensor_list_for_grid = []
         loop_iterator = trange(sample_num_per_prompt) if is_rank0 else range(sample_num_per_prompt)
-        
+
         for sample_num_per_prompt_index in loop_iterator:
-            # 采样生成
+            # Sample generations.
             params = {
                 "val_packed_text_ids": val_data["packed_text_ids"],
                 "val_packed_text_indexes": val_data["packed_text_indexes"],
@@ -251,24 +251,24 @@ def validate_on_fixed_batch(
             else:
                 denoise_latent, _, _, _ = fsdp_model.validation_gen(**params)
 
-            # 解码 + 保存
+            # Decode and save.
             for latent in denoise_latent:
                 v_list = [vae_model.vae_decode([latent_])[0] for latent_ in latent]
 
-                # 保持与原文件相同的保存格式
+                # Keep the original save format.
                 v_thwc = decode_video_tensor_for_geneval(v_list)
 
-                # 直接取第0帧
+                # Use frame 0 directly.
                 if v_thwc.shape[0] == 1:
                     tensor_list_for_grid.append(v_thwc.squeeze(0).cpu())
 
-                    # 保存单张图像
+                    # Save a single image.
                     save_name = f"{save_path_gen}/{index_save}/samples/{sample_num_per_prompt_index}.png"
                     Image.fromarray((v_thwc.squeeze(0).permute(1, 2, 0).cpu().numpy()).astype('uint8')).save(save_name)
                 else:
                     raise NotImplementedError("需要保存图像")
 
-        # 保存 grid 图
+        # Save the grid image.
         save_name = f"{save_path_gen}/{index_save}/grid.png"
         grid_tensor = make_grid(tensor_list_for_grid, nrow=int(np.sqrt(sample_num_per_prompt)), padding=0, pad_value=255)
         grid_numpy = grid_tensor.permute(1, 2, 0).numpy()
@@ -294,10 +294,10 @@ def main():
     parser = HfArgumentParser((ModelArguments, DataArguments, EvaluationArguments))
     model_args, data_args, inference_args = cast(Tuple[ModelArguments, DataArguments, EvaluationArguments], parser.parse_args_into_dataclasses())
 
-    # ========================= GenEVAL 路径解析 ==============================
+    # ========================= GenEVAL path resolution ==============================
     resolve_geneval_paths(model_args, data_args)
 
-    # NOTE validation_noise_seed 与 validation_data_seed 相同
+    # NOTE: validation_noise_seed matches validation_data_seed.
     inference_args.validation_noise_seed = inference_args.evaluation_seed
     inference_args.validation_data_seed = inference_args.evaluation_seed
     # Set seed:
@@ -337,7 +337,7 @@ def main():
         vae_model = None
         vae_config = None
 
-    # Lance的配置
+    # Lance config.
     config = LanceConfig(
         visual_gen=inference_args.visual_gen,
         visual_und=inference_args.visual_und,
@@ -366,13 +366,13 @@ def main():
 
     tokenizer, new_token_ids, num_new_tokens = add_special_tokens(tokenizer)
 
-    # 在加载ckpt前，初始化moe
+    # Initialize MoE before loading the checkpoint.
     if inference_args.copy_init_moe:
         language_model.init_moe()
 
     init_from_model_path_if_needed(model, model_args)
 
-    # 现在再 resize
+    # Resize after loading the checkpoint.
     if num_new_tokens > 0:
         model.language_model.resize_token_embeddings(len(tokenizer))
         model.config.llm_config.vocab_size = len(tokenizer)
@@ -408,7 +408,7 @@ def main():
         vae_config=vae_config,
     )
 
-    # 创建数据集
+    # Create dataset.
     val_dataset = ValidationDataset(
         jsonl_path= data_args.val_dataset_config_file,
         tokenizer=tokenizer,
@@ -437,7 +437,7 @@ def main():
     if not os.path.exists(inference_args.save_path_gen):
         os.makedirs(inference_args.save_path_gen, exist_ok=True)
 
-    # 主循环
+    # Main loop.
     for _ in trange(len(val_loader), desc="Validating", unit="batch", leave=True, ncols=80, disable=(GLOBAL_RANK != 0)):
         val_data_cpu = next(val_loader_iter)
 

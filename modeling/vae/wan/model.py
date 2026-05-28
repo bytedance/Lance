@@ -58,14 +58,14 @@ class WanVideoVAE(object):
     def configure_vae_model(self):
         device = get_device()
 
-        # 从 path_default.yaml 读取 VAE 路径
+        # Read the VAE path from path_default.yaml.
         try:
             from config.config_factory import get_model_path
             vae_path = get_model_path("vae.wan")
         except Exception as e:
-            # 降级到默认路径
+            # Fall back to the default local path.
             vae_path = "downloads/Wan2.2_VAE.pth"
-        
+
         self.vae: Wan2_2_VAE = Wan2_2_VAE(vae_pth=vae_path, device=device, dtype=self.dtype)
         # self.vae.requires_grad_(False).eval()
         # self.vae.to(device=get_device())
@@ -84,7 +84,7 @@ class WanVideoVAE(object):
                 if self.use_sample:
                     u = reparameterize(u, log_var)  # [1,48,t,h,w]
 
-                u = rearrange(u, "b c ... -> b ... c")  # -> [1,t,h,w,48] for 兼容
+                u = rearrange(u, "b c ... -> b ... c")  # -> [1,t,h,w,48] for compatibility
 
                 latents.append(u.squeeze(0))  # -> [t,h,w,48]
 

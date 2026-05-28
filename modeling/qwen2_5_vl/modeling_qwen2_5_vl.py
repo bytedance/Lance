@@ -584,7 +584,7 @@ class Qwen2_5_VLRotaryEmbedding(nn.Module):
         # else:
         #     self.rope_type = "default"
 
-        # HACK: 强制设置为default
+        # HACK: force the default RoPE type.
         self.rope_type = "default"
 
         self.max_seq_len_cached = config.max_position_embeddings

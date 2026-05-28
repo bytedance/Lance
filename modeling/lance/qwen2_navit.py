@@ -76,7 +76,7 @@ def pad_sequence(tensor, pad_size):
 
 
 class PackedAttention(Qwen2Attention):
-    # TODO: 暂未使用，qknorm未更新相关逻辑
+    # TODO: currently unused; QK norm logic has not been updated for this path.
     def __init__(self, config, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
         if self.config.qk_norm:
@@ -230,16 +230,16 @@ class PackedAttentionMoT(Qwen2Attention):
     def __init__(self, config, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
         if self.config.qk_norm_und or self.config.qk_norm_gen:
-            # NOTE: 拆开初始化
-            # 理解
+            # NOTE: initialize understanding and generation norms separately.
+            # Understanding.
             self.q_norm = Qwen2RMSNorm(self.head_dim, eps=config.rms_norm_eps) if self.config.qk_norm_und else nn.Identity()
             self.k_norm = Qwen2RMSNorm(self.head_dim, eps=config.rms_norm_eps) if self.config.qk_norm_und else nn.Identity()
 
-            # 生成
+            # Generation.
             self.q_norm_moe_gen = Qwen2RMSNorm(self.head_dim, eps=config.rms_norm_eps) if self.config.qk_norm_gen else nn.Identity()
             self.k_norm_moe_gen = Qwen2RMSNorm(self.head_dim, eps=config.rms_norm_eps) if self.config.qk_norm_gen else nn.Identity()
         else:
-            # NOTE: 不拆开初始化
+            # NOTE: use the shared initialization path.
             if self.config.qk_norm:
                 self.q_norm = Qwen2RMSNorm(self.head_dim, eps=config.rms_norm_eps)
                 self.k_norm = Qwen2RMSNorm(self.head_dim, eps=config.rms_norm_eps)
@@ -985,19 +985,19 @@ class Qwen2ForCausalLM(Qwen2PreTrainedModel):
         # Initialize weights and apply final processing
         # self.post_init() # NOTE too slow, not used in inference
 
-    # === 新增：解绑 + 克隆（防止绑权别名引发保存报错） ===
+    # Untie and clone to avoid save-time errors from tied-weight aliasing.
     def untie_lm_head(self):
         in_emb = self.get_input_embeddings()
         out_emb = self.get_output_embeddings()
         if out_emb.weight.data.data_ptr() == in_emb.weight.data.data_ptr():
             with torch.no_grad():
                 out_emb.weight = torch.nn.Parameter(in_emb.weight.detach().clone())
-        # 禁止后续自动 re-tie
+        # Prevent later automatic re-tying.
         self.config.tie_word_embeddings = False
         if hasattr(self, "_tied_weights_keys"):
             self._tied_weights_keys = []
 
-    # === 新增：当 vocab 扩大时，把新增行从输入词表拷到 lm_head（仅拷数值） ===
+    # When the vocab grows, copy newly added rows from input embeddings to lm_head.
     def copy_new_token_rows_to_lm_head(self, num_new_tokens: int):
         with torch.no_grad():
             if num_new_tokens and num_new_tokens > 0:
@@ -1030,7 +1030,7 @@ class Qwen2ForCausalLM(Qwen2PreTrainedModel):
             param.requires_grad = False
 
     def freeze_und_params(self):
-        # NOTE: 将理解部分的参数冻结
+        # NOTE: freeze the understanding-side parameters.
         for name, param in self.named_parameters():
             if "moe_gen" not in name:
                 # print(name)
@@ -1116,14 +1116,14 @@ class Qwen2ForCausalLM(Qwen2PreTrainedModel):
 
         return outputs
 
-    # 新增 计算rope index for Qwen-VL
+    # Compute RoPE indexes for Qwen-VL.
     def get_rope_index(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         video_grid_thw: Optional[torch.LongTensor] = None,
-        second_per_grid_ts: Optional[torch.Tensor] = None, # 视频中每个网格的时间间隔
-        attention_mask: Optional[torch.Tensor] = None, # 用于 mask padding token，防止在attention计算中考虑它们。 全 1 mask可以不提供
+        second_per_grid_ts: Optional[torch.Tensor] = None, # Time interval for each video grid.
+        attention_mask: Optional[torch.Tensor] = None, # Masks padding tokens; all-ones masks may be omitted.
         image_token_id: int = None,
         video_token_id: int = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -1202,14 +1202,14 @@ class Qwen2ForCausalLM(Qwen2PreTrainedModel):
                 input_ids = input_ids[attention_mask[i] == 1]
                 image_nums, video_nums = 0, 0
                 vision_start_indices = torch.argwhere(input_ids == vision_start_token_id).squeeze(1)
-                vision_tokens = input_ids[vision_start_indices + 1] # 用于判断下一个填充的token 是图像还是视频
+                vision_tokens = input_ids[vision_start_indices + 1] # Determine whether the next filled token is image or video.
                 image_nums = (vision_tokens == image_token_id).sum()
                 video_nums = (vision_tokens == video_token_id).sum()
                 input_tokens = input_ids.tolist()
                 llm_pos_ids_list: list = []
                 st = 0
                 remain_images, remain_videos = image_nums, video_nums
-                for _ in range(image_nums + video_nums): # 遍历图像和视频的token，计算每个图像或视频的结束位置：ed_image 和 ed_video 分别表示图像和视频 token 的结束位置。
+                for _ in range(image_nums + video_nums): # Iterate over image/video tokens to find their end positions.
                     if image_token_id in input_tokens and remain_images > 0:
                         ed_image = input_tokens.index(image_token_id, st)
                     else:

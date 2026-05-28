@@ -37,7 +37,7 @@ def _vit_denorm_uint8_thwc(video_tensor_c_first: torch.Tensor) -> np.ndarray:
     return x.permute(0, 2, 3, 1).cpu().numpy()
 
 
-def pad_video_list(video_tensor):  # video_tensor: List[Tensor], 每个Tensor的shape为[C T H W]
+def pad_video_list(video_tensor):  # video_tensor: List[Tensor], each tensor shape is [C T H W]
     video_sizes = [item.shape for item in video_tensor]
     max_video_size = [max(item) for item in list(zip(*video_sizes))]
     padded_videos_latent = torch.zeros(size=(len(video_tensor), *max_video_size))
@@ -48,10 +48,10 @@ def pad_video_list(video_tensor):  # video_tensor: List[Tensor], 每个Tensor的
 
 
 def decode_video_tensor(video_tensor, video_type="vae", save_path="", save_half=False, idx="", max_save_num=100000, save_item_name="", save_fps=12):
-    # video_tensor: list [N], 每一项为[C T H W]
+    # video_tensor: list [N], each item shape is [C T H W]
     # video_type: vae, vit
     N_target = len(video_tensor)
-    if N_target != 1:  # TODO: 支持多个视频目标时需要修改
+    if N_target != 1:  # TODO: update this when saving multiple target videos is supported.
         padded_videos_latent = pad_video_list(video_tensor)
         v_tc_hw = rearrange(padded_videos_latent, "n c t h w -> t c h (n w)")  # T C H' W
     else:
@@ -69,13 +69,13 @@ def decode_video_tensor(video_tensor, video_type="vae", save_path="", save_half=
             v_thwc_save = v_thwc[:, :, w // 2:, :]
         else:
             v_thwc_save = v_thwc
-        if v_thwc.shape[0] > 1:  # 保存视频
+        if v_thwc.shape[0] > 1:  # Save video.
             existing_files = glob.glob(f"{save_path}/*.mp4")
             if len(existing_files) > max_save_num:
                 quit()
             save_path_i = f"{save_path}/{save_item_name}.mp4"
             imageio.mimsave(save_path_i, v_thwc_save, fps=save_fps, format="mp4")
-        else:  # 保存图像
+        else:  # Save image.
             existing_files = glob.glob(f"{save_path}/*.png")
             if len(existing_files) > max_save_num:
                 quit()
@@ -105,10 +105,10 @@ def map_splits_to_samples(sample_lens: List[int], split_lens: List[int]) -> List
         remaining_length = sample_len
 
         while remaining_length > 0 and current_split_idx < len(split_lens):
-            # 添加当前split索引到样本
+            # Add the current split index to this sample.
             splits.append(current_split_idx)
 
-            # 减去当前split长度并移动到下一个split
+            # Consume the current split length and move to the next split.
             remaining_length -= split_lens[current_split_idx]
             current_split_idx += 1
 
@@ -118,28 +118,28 @@ def map_splits_to_samples(sample_lens: List[int], split_lens: List[int]) -> List
 
 
 @torch.no_grad()
-def make_padded_latent(padded_videos, data_mode, vae_model):  # 兼容 online 和 offline 两种模式
+def make_padded_latent(padded_videos, data_mode, vae_model):  # Support both online and offline modes.
     """
     for vae:
     data_mode = data['vae_data_mode']
     padded_videos = data.pop("padded_videos")
     """
-    if data_mode.count("offline") == 0:  # 全是online模式
+    if data_mode.count("offline") == 0:  # All entries are online.
         padded_latent = vae_model.vae_encode(padded_videos)
-    elif data_mode.count("online") == 0:  # 全是offline模式
+    elif data_mode.count("online") == 0:  # All entries are offline.
         padded_latent = padded_videos
-    else:  # 混合模式
+    else:  # Mixed online/offline modes.
         online_buf, idxs = [], []
         padded_latent = [None] * len(padded_videos)
 
         for i, (x, m) in enumerate(zip(padded_videos, data_mode)):
-            if m.lower().startswith("off"):  # offline: 直接取 latent
+            if m.lower().startswith("off"):  # offline: use the latent directly.
                 padded_latent[i] = x
-            else:  # online: 收集待编码的视频张量
+            else:  # online: collect video tensors for encoding.
                 online_buf.append(x)
                 idxs.append(i)
 
-        lat = vae_model.vae_encode(online_buf)  # 一次性 vae_encode, 提高效率
+        lat = vae_model.vae_encode(online_buf)  # Batch VAE encoding for efficiency.
         for i, idx in enumerate(idxs):
             padded_latent[idx] = lat[i]
 
@@ -149,27 +149,27 @@ def make_padded_latent(padded_videos, data_mode, vae_model):  # 兼容 online �
 
 
 @torch.no_grad()
-def make_packed_vit_token_embed(packed_vit_tokens, vit_data_mode, vit_video_grid_thw, vit_model):  # 兼容 online 和 offline 两种模式
+def make_packed_vit_token_embed(packed_vit_tokens, vit_data_mode, vit_video_grid_thw, vit_model):  # Support both online and offline modes.
     """
     for vit:
     vit_data_mode = vit_data_mode
     packed_vit_tokens = packed_vit_tokens
     """
-    if vit_data_mode.count("offline") == 0:  # 全是online模式
+    if vit_data_mode.count("offline") == 0:  # All entries are online.
         packed_vit_tokens = torch.cat(packed_vit_tokens, dim=0)
         packed_vit_token_embed = vit_model(
             hidden_states=packed_vit_tokens,  # L x 1176 or 2048
             grid_thw=vit_video_grid_thw,  # t, h, w
         )  # L x 1176 or 2048 -> L//4 x 2048
-    elif vit_data_mode.count("online") == 0:  # 全是offline模式
+    elif vit_data_mode.count("online") == 0:  # All entries are offline.
         packed_vit_token_embed = torch.cat(packed_vit_tokens, dim=0)  # L x 1176 or 2048
-    else:  # 混合模式
+    else:  # Mixed online/offline modes.
         packed_vit_token_embed, i_online = [], 0
         for i, (x, m) in enumerate(zip(packed_vit_tokens, vit_data_mode)):
-            if m.lower().startswith("off"):  # offline: 直接取 latent
+            if m.lower().startswith("off"):  # offline: use the latent directly.
                 packed_vit_token_embed.append(x)
             else:
-                if vit_video_grid_thw.shape[0] == len(packed_vit_tokens):  # 即表示 offline 的视频也会写入vit_video_grid_thw
+                if vit_video_grid_thw.shape[0] == len(packed_vit_tokens):  # Offline videos are also present in vit_video_grid_thw.
                     i_online = i
                 thw = vit_video_grid_thw[i_online:i_online+1]
                 packed_vit_token_embed.append(
@@ -230,7 +230,7 @@ def uncond_split_pro(
             continue
         elif attn_mode_ in ["noise", "full_noise"]:
             t, h, w = vae_video_grid_thw[curr_vae_split_idx_]
-            num_visual = int(t * h * w / 4)  # 4 为merge_size 2 的平方
+            num_visual = int(t * h * w / 4)  # 4 is merge_size 2 squared.
             uncond_vae_index.extend(range(len(uncond_split) + 1, len(uncond_split) + 1 + num_visual))
             uncond_packed_und_token_indexes.extend([len(uncond_split), len(uncond_split) + 1 + num_visual])
             uncond_packed_gen_token_indexes.extend(range(len(uncond_split) + 1, len(uncond_split) + 1 + num_visual))
@@ -251,11 +251,11 @@ def uncond_split_pro(
     uncond_packed_gen_token_indexes = torch.tensor(uncond_packed_gen_token_indexes, dtype=torch.long, device=device)
     uncond_packed_und_token_indexes = torch.tensor(uncond_packed_und_token_indexes, dtype=torch.long, device=device)
 
-    # ---- 创建uncond条件 ----
+    # ---- Create unconditional condition. ----
     uncond_text_ids = torch.tensor(uncond_split, device=device, dtype=torch.long)
     uncond_sequence = language_model.model.embed_tokens(uncond_text_ids).to(dtype=dtype)
 
-    # 2) 与训练一致 -> 也 pad 掉尾块
+    # 2) Match training behavior by padding the tail block as well.
     uncond_seq_len = len(uncond_text_ids)
     uncond_seq_len_pad = (uncond_seq_len + BLOCK_SIZE - 1) // BLOCK_SIZE * BLOCK_SIZE
     uncond_pad = uncond_seq_len_pad - uncond_seq_len

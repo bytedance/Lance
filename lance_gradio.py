@@ -545,16 +545,6 @@ class LanceT2VV2TPipeline:
                             f"- Output directory: `{save_dir}`"
                         )
                         return None, None, "", status
-                    # status = (
-                    #     "Inference completed.\n\n"
-                    #     f"- Task: `{internal_task}`\n"
-                    #     f"- Model: `{self.model_variant}`\n"
-                    #     f"- Model path: `{active_model_path}`\n"
-                    #     f"- GPU: `{self.device}`\n"
-                    #     f"- Actual seed: `{actual_seed}`\n"
-                    #     f"- Output directory: `{save_dir}`\n"
-                    #     f"- Result file: `{video_path}`"
-                    # )
                     status = ""
                     return str(video_path), None, "", status
 
@@ -570,28 +560,9 @@ class LanceT2VV2TPipeline:
                             f"- Output directory: `{save_dir}`"
                         )
                         return None, None, "", status
-                    # status = (
-                    #     "Inference completed.\n\n"
-                    #     f"- Task: `{internal_task}`\n"
-                    #     f"- Model: `{self.model_variant}`\n"
-                    #     f"- Model path: `{active_model_path}`\n"
-                    #     f"- GPU: `{self.device}`\n"
-                    #     f"- Actual seed: `{actual_seed}`\n"
-                    #     f"- Output directory: `{save_dir}`\n"
-                    #     f"- Result file: `{image_path}`"
-                    # )
                     status = ""
                     return None, str(image_path), "", status
 
-                # status = (
-                #     "Understanding completed.\n\n"
-                #     f"- Task: `{task}`\n"
-                #     f"- Model: `{self.model_variant}`\n"
-                #     f"- Model path: `{active_model_path}`\n"
-                #     f"- GPU: `{self.device}`\n"
-                #     f"- Actual seed: `{actual_seed}`\n"
-                #     f"- Output directory: `{save_dir}`"
-                # )
                 status = ""
                 return None, None, text_result, status
             except Exception:

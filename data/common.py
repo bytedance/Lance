@@ -56,7 +56,7 @@ def shift_position_ids(
     curr_split = 0
     for i, attn_mode in enumerate(attn_modes):
         if attn_mode in shift_attn_mode:
-            if pro_type == 10:  # 与sample_modality 有关
+            if pro_type == 10:  # Related to sample_modality.
                 if position_ids[:, :, i_sample_modality == 4].sum() != 0:
                     pos_shift_type4 = 1000 - position_ids[:, :, i_sample_modality == 4][0, 0, 0]
                     position_ids[0, :, i_sample_modality == 4] += pos_shift_type4

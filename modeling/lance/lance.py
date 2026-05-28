@@ -13,7 +13,6 @@
 # limitations under the License.
 # coding: utf-8
 
-import random
 from typing import List, Tuple, Optional, Dict
 from einops import rearrange
 import torch
@@ -26,7 +25,6 @@ from data.data_utils import (
     create_sparse_mask,
     get_flattened_position_ids_extrapolate,
     get_flattened_position_ids_interpolate,
-    get_flattened_position_ids_interpolate_video,
     get_flattened_position_ids_extrapolate_video,
 )
 from .qwen2_navit import NaiveCache, Qwen2ForCausalLM

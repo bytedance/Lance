@@ -30,7 +30,7 @@ class DataConfig:
     vit_cond_dropout_prob: float = 0.4
     vae_cond_dropout_prob: float = 0.1
 
-    # 将 vae_downsample 改为三元组，分别代表 (时间, 高度, 宽度) 的下采样率
+    # vae_downsample stores temporal, height, and width downsampling factors.
     vae_downsample: Tuple[int, int, int] = (4, 16, 16)
 
     max_latent_size: int = 64             # by ModelArguments
@@ -75,6 +75,6 @@ class SimpleCustomBatch:
         return self.__dict__.copy()
 
 
-# 顶层函数（可被 pickle）
+# Top-level function so it can be pickled.
 def simple_custom_collate(batch):
     return SimpleCustomBatch(batch)

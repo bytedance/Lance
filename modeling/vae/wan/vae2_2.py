@@ -787,7 +787,7 @@ class WanVAE_(nn.Module):
     def decode(self, z, scale):
         self.clear_cache()
         if isinstance(scale[0], torch.Tensor):
-            z = z / scale[1].view(1, self.z_dim, 1, 1, 1) + scale[0].view(1, self.z_dim, 1, 1, 1) # 这里会扩充维度
+            z = z / scale[1].view(1, self.z_dim, 1, 1, 1) + scale[0].view(1, self.z_dim, 1, 1, 1)  # This expands the dimensions.
         else:
             z = z / scale[1] + scale[0]
         iter_ = z.shape[2]

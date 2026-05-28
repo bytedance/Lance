@@ -26,9 +26,9 @@ from .distributed import get_global_rank, get_local_rank, get_world_size
 def get_logger(name: Optional[str] = None) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
-    logger.propagate = False # 修复: 禁用日志传播，防止日志被父级 logger 重复处理
+    logger.propagate = False  # Avoid duplicate records from parent loggers.
 
-    if not logger.handlers:  # 只看自身，避免祖先影响
+    if not logger.handlers:  # Only inspect this logger, not ancestors.
         h = logging.StreamHandler(sys.stdout)
         fmt = logging.Formatter(
             "[%(asctime)s] "
@@ -39,6 +39,5 @@ def get_logger(name: Optional[str] = None) -> logging.Logger:
         h.setFormatter(fmt)
         logger.addHandler(h)
     return logger
-
 
 

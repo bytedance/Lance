@@ -162,7 +162,7 @@ class Qwen2_5_VLVisionFlashAttention2(nn.Module):
             sin = emb.sin().float()
         else:
             cos, sin = position_embeddings
-            cos, sin = cos.float(), sin.float()  # NOTE BAGEL中报错, AssertionError: Input and cos/sin must have the same dtype, got torch.float32 and torch.bfloat16
+            cos, sin = cos.float(), sin.float()  # NOTE: BAGEL expects input and cos/sin to have the same dtype.
         q, k = apply_rotary_pos_emb_flashatt(q.unsqueeze(0), k.unsqueeze(0), cos, sin)
         q = q.squeeze(0)
         k = k.squeeze(0)
@@ -361,13 +361,13 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             context_dim=config.hidden_size,
             spatial_merge_size=config.spatial_merge_size,
         )
-        # 将原来2*2个patch合并成一个token。通过先把2*2个token的结果concat起来，然后经过一个mlp层做hidden_size维度的映射得到
+        # Merge each 2x2 patch group into one token via concat plus an MLP projection.
         self.gradient_checkpointing = False
 
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
-        for t, h, w in grid_thw:  # 对每个 grid（帧数t，高h，宽w）分别处理，生成二维位置索引
-            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)  # 生成高方向的位置索引（hpos_ids）
+        for t, h, w in grid_thw:  # Generate 2D position indexes for each (t, h, w) grid.
+            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)  # Height-axis position indexes.
             hpos_ids = hpos_ids.reshape(
                 h // self.spatial_merge_size,
                 self.spatial_merge_size,
@@ -377,7 +377,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             hpos_ids = hpos_ids.permute(0, 2, 1, 3)
             hpos_ids = hpos_ids.flatten()
 
-            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)  # 生成宽方向的位置索引（wpos_ids）
+            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)  # Width-axis position indexes.
             wpos_ids = wpos_ids.reshape(
                 h // self.spatial_merge_size,
                 self.spatial_merge_size,
@@ -389,8 +389,8 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
         pos_ids = torch.cat(pos_ids, dim=0)
         max_grid_size = grid_thw[:, 1:].max()
-        rotary_pos_emb_full = self.rotary_pos_emb(max_grid_size)  # 生成最大 grid 尺寸下的 rotary embedding
-        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)  # 按照每个 patch 的位置索引提取 embedding
+        rotary_pos_emb_full = self.rotary_pos_emb(max_grid_size)  # Rotary embeddings for the largest grid.
+        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)  # Gather embeddings by patch position index.
         return rotary_pos_emb
 
     def get_window_index(self, grid_thw):
@@ -446,7 +446,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
             `torch.Tensor`: hidden_states.
         """
         hidden_states = self.patch_embed(hidden_states)
-        rotary_pos_emb = self.rot_pos_emb(grid_thw)  # 计算输入的每个视频的rope
+        rotary_pos_emb = self.rot_pos_emb(grid_thw)  # Compute RoPE for each input video.
         window_index, cu_window_seqlens = self.get_window_index(grid_thw)
         cu_window_seqlens = torch.tensor(
             cu_window_seqlens,
@@ -489,6 +489,6 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
 
         hidden_states = self.merger(hidden_states) # L x 1280 -> L//4 x 2048
         reverse_indices = torch.argsort(window_index)
-        hidden_states = hidden_states[reverse_indices, :] # 还是 L//4 x 2048
+        hidden_states = hidden_states[reverse_indices, :] # Still L//4 x 2048.
 
         return hidden_states

@@ -75,10 +75,10 @@ def _resolve_placeholders(path: str, config: Dict[str, Any]) -> str:
     Recursively resolve placeholders in a path, e.g. ${base_dir} or ${vit.qwen2_5_vl}.
     """
     matches = _PLACEHOLDER_PATTERN.findall(path)
-    
+
     if not matches:
         return path
-    
+
     result = path
     for match in matches:
         try:
@@ -100,10 +100,10 @@ def get_model_path_config(reload: bool = False) -> Dict[str, Any]:
     :return: Resolved configuration dictionary.
     """
     global _MODEL_PATH_CONFIG_CACHE
-    
+
     if _MODEL_PATH_CONFIG_CACHE is not None and not reload:
         return _MODEL_PATH_CONFIG_CACHE
-    
+
     if not _DEFAULT_PATH_FILE.exists():
         raise FileNotFoundError(
             f"Model path configuration file not found: {_DEFAULT_PATH_FILE}"

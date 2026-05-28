@@ -256,5 +256,5 @@ class Qwen2Config(_Qwen2Config):
         # add apply qwen 2.5 vl pos emb
         self.apply_qwen_2_5_vl_pos_emb = kwargs.get("apply_qwen_2_5_vl_pos_emb", False)
 
-        # # 新增算法设计部分
+        # # New algorithm design section
         # self.mixture_kvdepth_type = kwargs.get("mixture_kvdepth_type", "none")

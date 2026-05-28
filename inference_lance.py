@@ -40,7 +40,6 @@ from modeling.qwen2 import Qwen2Tokenizer
 from modeling.qwen2.modeling_qwen2 import Qwen2Config
 from modeling.vit.qwen2_5_vl_vit import Qwen2_5_VisionTransformerPretrainedModel
 from common.utils.misc import tuple_mul, AutoEncoderParams
-from common.utils.distributed import get_global_rank
 from common.utils.logging import get_logger
 from common.val.utils import make_padded_latent, decode_video_tensor
 from data.datasets_custom import ValidationDataset

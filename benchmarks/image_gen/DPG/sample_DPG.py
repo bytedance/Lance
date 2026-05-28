@@ -49,9 +49,9 @@ from config.config_factory import ModelArguments, DataArguments, TrainingArgumen
 
 
 def init_from_vlm_if_needed(model: Qwen2ForCausalLM, model_args: ModelArguments, log_rank0):
-    # NOTE: 初始化加载VLM模型走这里
+    # NOTE: VLM initialization loads through this path.
     def load_safetensors_state_dict(folder_path):
-        # 只选取safetensors文件，按文件名排序保证顺序
+        # Select safetensors files only and sort by filename for deterministic order.
         safetensor_files = sorted(
             f for f in os.listdir(folder_path) if f.endswith(".safetensors")
         )
@@ -63,12 +63,12 @@ def init_from_vlm_if_needed(model: Qwen2ForCausalLM, model_args: ModelArguments,
 
     state_dict = load_safetensors_state_dict(model_args.llm_path)
 
-    # 参数名的更改以适配Lance的参数名
+    # Rename parameters to match Lance parameter names.
     for k in list(state_dict.keys()):
         if "visual" in k:  # ViT and connector
             state_dict[k.replace("visual", "vit_model")] = state_dict.pop(k)
         else:
-            # 添加language_model前缀
+            # Add the language_model prefix.
             state_dict["language_model." + k] = state_dict.pop(k)
 
     result = model.load_state_dict(state_dict, strict=False)
@@ -77,7 +77,7 @@ def init_from_vlm_if_needed(model: Qwen2ForCausalLM, model_args: ModelArguments,
 
 
 def init_from_model_path_if_needed(model: Qwen2ForCausalLM, model_args: ModelArguments):
-    # 统一从 model_path 加载训练好的 Lance checkpoint。
+    # Always load the trained Lance checkpoint from model_path.
     path_dir = model_args.model_path
     ema_path = osp.join(path_dir, "ema.safetensors")
     model_path = osp.join(path_dir, "model.safetensors")
@@ -173,31 +173,31 @@ def validate_on_fixed_batch(
     """
     验证逻辑，保持与原文件相同的保存格式
     """
-    # 检查是否初始化了分布式环境
+    # Check whether distributed execution has been initialized.
     if dist.is_initialized():
         is_rank0 = (dist.get_rank() == 0)
     else:
         is_rank0 = True
-    
+
     log_rank0 = logger.info if is_rank0 else (lambda *_: None)
     val_data = val_data_cpu.cuda(device).to_dict()
 
     with torch.no_grad(), torch.amp.autocast("cuda", enabled=True, dtype=torch.bfloat16):
-        # 计算 padded_latent
+        # Compute padded_latent.
         if "padded_videos" in val_data.keys():
             val_data["padded_latent"] = make_padded_latent(val_data["padded_videos"], val_data["vae_data_mode"], vae_model)
 
-        # -------------------- GEN 分支 --------------------
+        # -------------------- GEN branch --------------------
         tensor_list_for_grid = []
         loop_iterator = trange(sample_num_per_prompt) if is_rank0 else range(sample_num_per_prompt)
 
-        # 支持断点重新生成
+        # Support resumable generation.
         save_name = f"{save_path_gen}/{val_data['index']}.png"
         if os.path.exists(save_name):
             return None
 
         for sample_num_per_prompt_index in loop_iterator:
-            # 采样生成（保持原参数）
+            # Sample generations with the original parameters.
             params = {
                 "val_packed_text_ids": val_data["packed_text_ids"],
                 "val_packed_text_indexes": val_data["packed_text_indexes"],
@@ -243,20 +243,20 @@ def validate_on_fixed_batch(
             else:
                 denoise_latent, captions, padded_videos, index = fsdp_model.validation_gen(**params)
 
-            # 解码 + 保存
+            # Decode and save.
             for i_val, latent in enumerate(denoise_latent):
                 v_list = [vae_model.vae_decode([latent_])[0] for latent_ in latent]
 
-                # 保持与原文件相同的保存格式
+                # Keep the original save format.
                 v_thwc = decode_video_tensor_for_dpg(v_list)
 
-                # 直接取第0帧
+                # Use frame 0 directly.
                 if v_thwc.shape[0] == 1:
                     tensor_list_for_grid.append(v_thwc.squeeze(0).cpu())
                 else:
                     raise NotImplementedError("需要保存图像")
 
-    # 保持原有的保存格式
+    # Keep the original save format.
     grid_tensor = make_grid(tensor_list_for_grid, nrow=int(np.sqrt(sample_num_per_prompt)), padding=0, pad_value=255)
     grid_numpy = grid_tensor.permute(1, 2, 0).numpy()
     Image.fromarray(grid_numpy).save(save_name)
@@ -285,10 +285,10 @@ def main():
     )
     training_args = inference_args
 
-    # ========================= DPG 路径解析 ==============================
+    # ========================= DPG path resolution ==============================
     resolve_dpg_paths(model_args, data_args)
 
-    # NOTE validation_noise_seed 与 validation_data_seed 相同
+    # NOTE: validation_noise_seed matches validation_data_seed.
     training_args.validation_noise_seed = inference_args.evaluation_seed
     training_args.validation_data_seed = inference_args.evaluation_seed
     logger = get_logger()
@@ -330,7 +330,7 @@ def main():
         vae_model = None
         vae_config = None
 
-    # Lance的配置
+    # Lance config.
     config = LanceConfig(
         visual_gen=training_args.visual_gen,
         visual_und=training_args.visual_und,
@@ -359,13 +359,13 @@ def main():
 
     tokenizer, new_token_ids, num_new_tokens = add_special_tokens(tokenizer)
 
-    # 在加载ckpt前，初始化moe
+    # Initialize MoE before loading the checkpoint.
     if training_args.copy_init_moe:
         language_model.init_moe()
 
     init_from_model_path_if_needed(model, model_args)
 
-    # 现在再 resize
+    # Resize after loading the checkpoint.
     if num_new_tokens > 0:
         model.language_model.resize_token_embeddings(len(tokenizer))
         model.config.llm_config.vocab_size = len(tokenizer)
@@ -393,10 +393,10 @@ def main():
     if vae_model is not None and hasattr(vae_model, "eval"):
         vae_model.eval()
 
-    # Setup packed dataloader - 直接初始化简单的 DataConfig 对象
+    # Setup packed dataloader with a simple DataConfig instance.
     dataset_config = DataConfig(grouped_datasets={})
 
-    # 配置基本参数
+    # Configure basic parameters.
     dataset_config.num_frames = inference_args.num_frames
     dataset_config.H = inference_args.video_height
     dataset_config.W = inference_args.video_width
@@ -404,13 +404,13 @@ def main():
     dataset_config.resolution = inference_args.resolution
     dataset_config.text_template = inference_args.text_template
 
-    # 配置 VIT 相关参数
+    # Configure VIT parameters.
     if training_args.visual_und:
         dataset_config.vit_patch_size = model_args.vit_patch_size
         dataset_config.vit_patch_size_temporal = model_args.vit_patch_size_temporal
         dataset_config.vit_max_num_patch_per_side = model_args.vit_max_num_patch_per_side
 
-    # 配置 VAE 相关参数
+    # Configure VAE parameters.
     if training_args.visual_gen and vae_config:
         assert len(model_args.latent_patch_size) == 3, "len(latent_patch_size) must be 3"
         vae_downsample = tuple_mul(
@@ -421,12 +421,12 @@ def main():
         dataset_config.max_latent_size = model_args.max_latent_size
         dataset_config.max_num_frames = model_args.max_num_frames
 
-    # fix: 共享dropout
+    # Share dropout settings.
     dataset_config.text_cond_dropout_prob = model_args.text_cond_dropout_prob
     dataset_config.vae_cond_dropout_prob = model_args.vae_cond_dropout_prob
     dataset_config.vit_cond_dropout_prob = model_args.vit_cond_dropout_prob
 
-    # 创建数据集
+    # Create dataset.
     val_dataset = ValidationDataset(
         jsonl_path= data_args.val_dataset_config_file,
         tokenizer=tokenizer,
@@ -456,7 +456,7 @@ def main():
     if not os.path.exists(inference_args.save_path_gen):
         os.makedirs(inference_args.save_path_gen, exist_ok=True)
 
-    # 主循环
+    # Main loop.
     from tqdm import tqdm
     import time
     from datetime import datetime, timedelta

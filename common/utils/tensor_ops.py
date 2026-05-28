@@ -76,7 +76,7 @@ def unpack(
     return samples
 
 
-# 需要保留的辅助函数，因为 rearrange 和 repeat 依赖它们
+# Keep these helpers because rearrange and repeat depend on them.
 def flatten(
     hid: List[torch.FloatTensor],  # List of (*** c)
 ) -> Tuple[

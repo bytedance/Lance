@@ -192,7 +192,7 @@ class VisualTransform:
         return img
 
     def __call__(self, img, img_num=1):
-        # --- 视频序列处理 ---
+        # --- Video sequence handling ---
         if isinstance(img, (list, tuple)):
             # List of PIL.Image or tensors
             out = torch.stack([self._process_single(frame, img_num=img_num) for frame in img])  # [T, C, H, W]
@@ -214,5 +214,5 @@ class VisualTransform:
             out = out.permute(1, 0, 2, 3)  # [C, T, H, W]
             return out
         else:
-            # 单帧
+            # Single frame.
             return self._process_single(img, img_num=img_num)

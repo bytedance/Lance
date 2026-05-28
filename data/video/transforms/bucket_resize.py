@@ -36,7 +36,7 @@ class BucketResize:
         assert aspect_ratios and stride, "`aspect_ratios` or `stride` not given!"
         self.buckets, self.bucket_ratios = self.init_buckets(aspect_ratios, max_area, stride)
         self.bucket_resize = {
-            # NOTICE: 虽然名字叫 random, 但在这个 setting 下是 center crop, 无随机性
+            # NOTICE: despite the name, this setting performs a deterministic center crop.
             # bucket: (h,w)
             bucket: RandomResizedCrop(
                 size=(bucket[0], bucket[1]),

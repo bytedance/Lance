@@ -76,7 +76,7 @@ def get_3d_sincos_pos_embed_from_grid(embed_dim, grid):
     """
     assert embed_dim % 2 == 0, "Embedding dimension must be even for 3D embeddings"
 
-    # 维度分配策略保持不变（确保每轴维度为偶数）
+    # Keep the same dimension allocation strategy and ensure each axis has an even dimension.
     d = embed_dim // 3
     d = d if d % 2 == 0 else d - 1
     dim_t, dim_h = d, d
@@ -142,7 +142,7 @@ class TimestepEmbedder(nn.Module):
 
     def forward(self, t):
         t_freq = self.timestep_embedding(t, self.frequency_embedding_size)
-        t_emb = self.mlp(t_freq) # 跟llm的hidden size对齐
+        t_emb = self.mlp(t_freq) # Align with the LLM hidden size.
         return t_emb
 
 

@@ -147,7 +147,7 @@ def validate_on_fixed_batch(
         save_dir_current = os.path.join(save_path_gen, "fullset/{}/{}".format(task_type, instruction_language))
         os.makedirs(save_dir_current, exist_ok=True)
 
-        # -------------------- GEN 分支 --------------------
+        # -------------------- GEN branch --------------------
         params = {
             "val_packed_text_ids": val_data["packed_text_ids"],
             "val_packed_text_indexes": val_data["packed_text_indexes"],

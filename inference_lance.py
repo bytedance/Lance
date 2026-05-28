@@ -60,6 +60,8 @@ RESULT_JSON_FILENAME = "result.json"
 INTERNAL_VALIDATION_MAX_SAMPLES = 100000
 TASK_T2V = "t2v"
 TASK_T2I = "t2i"
+TASK_TI2V = "ti2v"
+TASK_FF2V = "ff2v"
 TASK_X2T_IMAGE = "x2t_image"
 TASK_X2T_VIDEO = "x2t_video"
 TASK_IMAGE_EDIT = "image_edit"
@@ -67,6 +69,8 @@ TASK_VIDEO_EDIT = "video_edit"
 GENERATION_TASKS = {
     TASK_T2V,
     TASK_T2I,
+    TASK_TI2V,
+    TASK_FF2V,
     TASK_IMAGE_EDIT,
     TASK_VIDEO_EDIT,
 }
@@ -84,6 +88,16 @@ TASK_DEFAULT_CONFIGS = {
         "model_family": "video",
         "example_json": "config/examples/t2v_example.json",
         "save_path_prefix": "results/t2v_sample",
+    },
+    TASK_TI2V: {
+        "model_family": "video",
+        "example_json": "config/examples/ti2v_example.json",
+        "save_path_prefix": "results/ti2v_sample",
+    },
+    TASK_FF2V: {
+        "model_family": "video",
+        "example_json": "config/examples/ti2v_example.json",
+        "save_path_prefix": "results/ff2v_sample",
     },
     TASK_IMAGE_EDIT: {
         "model_family": "image",
@@ -360,7 +374,7 @@ def validate_on_fixed_batch(
                 clean_memory()
                 log_cuda_memory("validate:after_vae_reload_for_decode", device)
             for i_val, latent in enumerate(denoise_latent):
-                if inference_args.task in {TASK_IMAGE_EDIT, TASK_VIDEO_EDIT}:
+                if inference_args.task in {TASK_TI2V, TASK_FF2V, TASK_IMAGE_EDIT, TASK_VIDEO_EDIT}:
                     target_latents = [latent[-1]]
                 else:
                     target_latents = latent

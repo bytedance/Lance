@@ -1,0 +1,87 @@
+ {
+  "0001": {
+    "interleave_array": [
+      "A close-up shot shows a young Indian woman smiling and speaking. She is slightly sideways to the camera, with her black long hair tied at the back of her head. She is wearing a red top with white polka dots, black-framed glasses and white flower-shaped earrings, and has obvious double chin. The woman's forehead is full, her eyes are bright, her nose bridge is relatively flat, her mouth is open revealing uneven teeth. The skin around her mouth is slightly loose with some fine lines. There are some small moles on her face. The background is a bookshelf full of books and some decorations. fixed shot. The woman is speaking happily and shaking her head. She glances at the right side of the screen and then continues to look to the left side of the screen.",
+      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000000_cond1.jpg",
+      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000000_tgt2.mp4"
+    ],
+    "element_dtype_array": [
+      "text",
+      "image",
+      "video"
+    ],
+    "istarget_in_interleave": [
+      0,
+      0,
+      1
+    ]
+  },
+  "0002": {
+    "interleave_array": [
+      "An old-fashioned Korean drama with poor picture quality. A close shot shows a Korean man and a little girl looking at a blue game console. On the left side of the picture, the man has black medium-length hair with bangs covering his forehead. His eyes are looking down and he is wearing a dark blue hoodie. On the right side of the picture, the little girl has long black curly hair, wears a brown hairband with a fluffy ball, and is dressed in a white shirt and a dark waistcoat. She tilts her head and looks at the man with a smile. The background is blurry. The wall has texture, there is a light-colored cabinet on the left, and on the right, there is a blue backpack and a dark backpack hanging. a girl excitedly talks to a man, constantly shaking her head and raising her eyebrows. The man plays with the game console in his hand and nods.",
+      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000001_cond1.jpg",
+      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000001_tgt2.mp4"
+    ],
+    "element_dtype_array": [
+      "text",
+      "image",
+      "video"
+    ],
+    "istarget_in_interleave": [
+      0,
+      0,
+      1
+    ]
+  },
+  "0003": {
+    "interleave_array": [
+      "A medium close up shot shows a middle-aged East Asian man sitting on a wooden chair with a red cushion in the meeting room. He has short grayish-black hair, a slightly square face, a round nose tip, and stubble on his upper lip and chin. His eyes glance to the left of the picture. He is wearing a white shirt and a dark blue jacket. In the background, there are several chairs with white cushions and wooden armrests, and the backrests of these chairs are covered with red cushions. On the gray wall in the background, there are some words and patterns. a medium shot of an Asian man speaking and gesturing. He briefly looks to the side and then faces forward again. The man speaks and raises his hand a little while looking to the side. He raises his hand again and looks to the side.",
+      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000002_cond1.jpg",
+      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000002_tgt2.mp4"
+    ],
+    "element_dtype_array": [
+      "text",
+      "image",
+      "video"
+    ],
+    "istarget_in_interleave": [
+      0,
+      0,
+      1
+    ]
+  },
+  "0004": {
+    "interleave_array": [
+      "A Chinese TV drama with a sense of the times, a close shot shows a pair of Chinese man and woman walking on the street. The young woman on the left of the picture has a delicate appearance, smooth facial lines, and her hair is coiled up at the back of her head. She is wearing a pink coat with a red collar and silver earrings. Her eyes are looking to the right of the picture, seemingly a little shy. The man on the right of the picture is wearing a black cotton-padded jacket and black-framed glasses. He has an ordinary appearance with short black hair and a slightly round face. He lowers his head and looks downwards, seemingly speaking. The background is blurry, with some people and a black curtain hanging on a wooden frame. on the bustling street, a man in black turns his head and walks out of the frame to the right. A woman follows behind him and walks out of the frame to the right. Then a man in a gray waistcoat, with a red scarf around his neck, a black hat and small eyes, walks out of the tent, lowers his head and walks forward. The focus shifts and centers on the man in the gray waistcoat. He walks towards the camera. On the left side of the frame, a middle-aged Chinese man wearing a blue woolen coat, a fur waistcoat, a white inner lining, a yellow fur hat, a beard and an ordinary appearance, turns around and walks forward.",
+      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000003_cond1.jpg",
+      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000003_tgt2.mp4"
+    ],
+    "element_dtype_array": [
+      "text",
+      "image",
+      "video"
+    ],
+    "istarget_in_interleave": [
+      0,
+      0,
+      1
+    ]
+  },
+  "0005": {
+    "interleave_array": [
+      "A close-up shot shows a hand holding a bag of Lay's potato chips. The packaging is mainly purple with red and white English letters on it. There are yellow potato chip patterns and a piece of ham on it. On the right are the same purple potato chips, and on the left are the same packaging of Lay's potato chips. In the background, shelves are filled with various bags of potato chips, including purple, red and white bags. a close-up shot shows a hand holding a bag of potato chips and slightly rotating it. The supermarket shelves in the background are filled with various bags of potato chips.",
+      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000004_cond1.jpg",
+      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000004_tgt2.mp4"
+    ],
+    "element_dtype_array": [
+      "text",
+      "image",
+      "video"
+    ],
+    "istarget_in_interleave": [
+      0,
+      0,
+      1
+    ]
+  }
+}

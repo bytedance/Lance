@@ -266,6 +266,16 @@ bash inference_lance.sh \
   --SAVE_PATH_GEN results/x2t_image
 ```
 
+bash inference_lance.sh \
+  --TASK_NAME ti2v \
+  --MODEL_PATH downloads/Lance_3B_Video \
+  --RESOLUTION video_480p \
+  --NUM_FRAMES 50 \
+  --VIDEO_HEIGHT 480 \
+  --VIDEO_WIDTH 848 \
+  --SAVE_PATH_GEN results/ti2v_test/idip2
+
+
 <details>
 <summary><strong>Show task and parameter reference</strong></summary>
 

@@ -266,6 +266,24 @@ bash inference_lance.sh \
   --SAVE_PATH_GEN results/x2t_image
 ```
 
+#### 文本-图像到视频生成
+bash inference_lance.sh \
+  --TASK_NAME ti2v \
+  --MODEL_PATH downloads/Lance_3B_Video \
+  --RESOLUTION video_480p \
+  --SAVE_PATH_GEN results/ti2v_test/idip
+
+
+#### 文本-图像到视频生成
+bash inference_lance.sh \
+  --TASK_NAME ff2v \
+  --MODEL_PATH downloads/Lance_3B_Video \
+  --RESOLUTION video_480p \
+  --SAVE_PATH_GEN results/ti2v_test/ff2v
+
+
+config/examples/ti2v_example.json  
+
 <details>
 <summary><strong>展开任务和参数参考</strong></summary>
 

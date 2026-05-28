@@ -223,7 +223,7 @@ class InferenceArguments(TrainingArguments):
     video_height:               int = 480
     video_width:                int = 480
     num_frames:                 int = 50
-    task:                       str = "t2v"  # t2v / t2i / edit / idip ...
+    task:                       str = "t2v"  # t2v / t2i / ti2v / ff2v / edit / idip ...
     resolution:                 str = "video_360p"  # image_256res, image_512res, video_192p, video_360p, etc.
     text_template:              bool = False  # Whether to use the system_prompt text template.
     max_duration:               float = 6.0  # Maximum video duration in seconds.

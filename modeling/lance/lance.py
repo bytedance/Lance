@@ -1709,7 +1709,12 @@ class Lance(PreTrainedModel):
                             raise NotImplementedError(f"{cfg_renorm_type} is not suppoprted")
                         v_t = v_t_ * scale
 
-                    x_t[current_vae_mse_indexes_local_in_vae] = x_t[current_vae_mse_indexes_local_in_vae] - v_t.to(x_t.device) * dts[i]  # velocity pointing from data to noise
+                    #x_t[current_vae_mse_indexes_local_in_vae] = x_t[current_vae_mse_indexes_local_in_vae] - v_t.to(x_t.device) * dts[i]  # velocity pointing from data to noise
+                    len_v_t = current_vae_mse_indexes_local_in_vae.shape[0]
+                    if len_v_t == v_t.shape[0]:
+                        x_t[current_vae_mse_indexes_local_in_vae] = x_t[current_vae_mse_indexes_local_in_vae] - v_t.to(x_t.device) * dts[i]  # velocity pointing from data to noise
+                    else:
+                        x_t[current_vae_mse_indexes_local_in_vae] = x_t[current_vae_mse_indexes_local_in_vae] - v_t.to(x_t.device)[current_vae_mse_indexes_local_in_vae] * dts[i]  # velocity pointing from data to noise
 
             # ---- Reshape each sample independently to [T,H,W,C], avoiding use of the last sample's t/h/w for the whole batch ----
             curr_seq_target, patch = 0, []

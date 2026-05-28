@@ -7,7 +7,7 @@ source "$SCRIPT_DIR/benchmarks/sample_env.sh"
 # ========================= Inference Parameters =========================
 NUM_GPUS=${NUM_GPUS:-1}
 
-TASK_NAME=${TASK_NAME:-x2t_image} # t2i | image_edit | t2v | video_edit | x2t_image | x2t_video
+TASK_NAME=${TASK_NAME:-x2t_image} # t2i | image_edit | t2v | ti2v | ff2v | video_edit | x2t_image | x2t_video
 
 VALIDATION_NUM_TIMESTEPS=${VALIDATION_NUM_TIMESTEPS:-30}
 VALIDATION_TIMESTEP_SHIFT=${VALIDATION_TIMESTEP_SHIFT:-3.5}
@@ -22,6 +22,7 @@ RESOLUTION=${RESOLUTION:-"video_480p"}   # image_768res | video_480p
 TEXT_TEMPLATE=${TEXT_TEMPLATE:-true}
 
 MODEL_PATH=${MODEL_PATH:-"downloads/Lance_3B_Video"}
+CONFIG_PATH=${CONFIG_PATH:-""}
 
 # ========================= Command-line Arguments =========================
 while [[ $# -gt 0 ]]; do
@@ -29,6 +30,7 @@ while [[ $# -gt 0 ]]; do
         --NUM_GPUS) NUM_GPUS="$2"; shift 2 ;;
         --TASK_NAME) TASK_NAME="$2"; shift 2 ;;
         --MODEL_PATH) MODEL_PATH="$2"; shift 2 ;;
+        --CONFIG_PATH) CONFIG_PATH="$2"; shift 2 ;;
 
         --VALIDATION_NUM_TIMESTEPS) VALIDATION_NUM_TIMESTEPS="$2"; shift 2 ;;
         --VALIDATION_TIMESTEP_SHIFT) VALIDATION_TIMESTEP_SHIFT="$2"; shift 2 ;;
@@ -48,6 +50,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Example:"
             echo "  bash inference_lance_my.sh --TASK_NAME t2i --MODEL_PATH downloads/Lance_3B --RESOLUTION image_768res"
+            echo "  bash inference_lance_my.sh --TASK_NAME image_edit --CONFIG_PATH config.json"
             exit 0
             ;;
 
@@ -90,6 +93,11 @@ echo "Save path: ${SAVE_PATH_GEN}"
 echo "Resolution: ${VIDEO_HEIGHT}x${VIDEO_WIDTH}"
 echo "Output frames: ${NUM_FRAMES}"
 echo "Model path: ${MODEL_PATH}"
+if [ -n "$CONFIG_PATH" ]; then
+    echo "Config path: ${CONFIG_PATH}"
+else
+    echo "Config path: task default"
+fi
 echo ""
 echo "Key parameters:"
 echo "  - validation_num_timesteps: ${VALIDATION_NUM_TIMESTEPS}"
@@ -102,6 +110,11 @@ echo "================================================"
 echo ""
 
 # ============================== Run Inference ==============================
+CONFIG_ARGS=()
+if [ -n "$CONFIG_PATH" ]; then
+    CONFIG_ARGS=(--val_dataset_config_file "$CONFIG_PATH")
+fi
+
 accelerate launch \
     --num_machines          $NUM_MACHINES \
     --num_processes         $TOTAL_RANK \
@@ -137,7 +150,8 @@ accelerate launch \
     --resolution            "$RESOLUTION" \
     --text_template         "$TEXT_TEMPLATE" \
     --cfg_text_scale        $CFG_TEXT_SCALE \
-    --use_KVcache           "$USE_KVCACHE"
+    --use_KVcache           "$USE_KVCACHE" \
+    "${CONFIG_ARGS[@]}"
 
 echo ""
 echo "================================================"

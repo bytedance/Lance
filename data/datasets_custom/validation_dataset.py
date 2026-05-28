@@ -247,7 +247,7 @@ class ValidationDataset(Dataset):
                     "clip_indices": [(0, total_frames)],
                     "fps": fps,
                 }
-
+                
             frames_sampler_output: FrameSamplerOutput = self.frame_sampler(frames_info)
             video_frames = self._read_decord(video_reader, frames_sampler_output.indices)
 

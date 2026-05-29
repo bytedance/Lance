@@ -616,7 +616,13 @@ class Qwen2MoTDecoderLayer(nn.Module):
 
         # Self Attention
         if attention_mask is not None:
-            attention_mask = attention_mask.to(device=packed_sequence_.device)
+            # Mask may be a BlockMask (single tensor) or a List of per-sample dense
+            # masks (model-parallel path that routes attention through SDPA). Move
+            # each element onto this layer's shard so SDPA's device check passes.
+            if isinstance(attention_mask, list):
+                attention_mask = [m.to(device=packed_sequence_.device) for m in attention_mask]
+            else:
+                attention_mask = attention_mask.to(device=packed_sequence_.device)
 
         packed_sequence_ = self.self_attn(
             packed_sequence=packed_sequence_,
@@ -891,6 +897,13 @@ class Qwen2Model(Qwen2PreTrainedModel):
                 **extra_inputs,
                 **kwargs,
             )
+
+        # Model-parallel: after the layer loop, packed_sequence lives on whichever
+        # shard ran the last layer (e.g. cuda:4). The index tensors and norm modules
+        # are pinned to cuda:0. Move the sequence back so the parent-level indexing
+        # below combines tensors on a single device.
+        if self.use_moe and packed_sequence.device != packed_und_token_indexes.device:
+            packed_sequence = packed_sequence.to(packed_und_token_indexes.device)
 
         if self.use_moe:
             packed_sequence_ = torch.zeros_like(packed_sequence)

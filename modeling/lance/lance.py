@@ -40,6 +40,36 @@ from common.val.utils import map_splits_to_samples, make_packed_vit_token_embed,
 from data.common import shift_position_ids
 from copy import deepcopy
 
+def _flex_mask_to_dense_list(
+    mask_fn,
+    seqlen: int,
+    device,
+    dtype: torch.dtype = torch.bfloat16,
+):
+    """Convert flex_attention's mask function (a closure over device-specific tensors)
+    into a List[Tensor] of dense additive masks usable by scaled_dot_product_attention.
+
+    flex_attention is incompatible with accelerate's model-parallel dispatch: the
+    BlockMask captures tensors on the device where it was built, and dynamo's tracer
+    refuses to combine them with Q/K/V tensors on a different shard. The attention
+    forward already has a List-of-masks branch that runs eager SDPA per sample (see
+    qwen2_navit.py `if isinstance(attention_mask, List)`), and SDPA crosses devices
+    cleanly via the standard accelerate hooks. Calling this helper at every
+    create_block_mask site funnels the layer attention into that SDPA branch.
+    """
+    q_idx = torch.arange(seqlen, device=device)
+    kv_idx = torch.arange(seqlen, device=device)
+    qq, kk = torch.meshgrid(q_idx, kv_idx, indexing="ij")
+    # `and_masks`/`or_masks` from flex_attention call `b.new_ones(...)` on the batch
+    # arg, so b/h must be tensors (not ints). Sub-masks ignore b/h anyway.
+    b = torch.zeros((), dtype=torch.long, device=device)
+    h = torch.zeros((), dtype=torch.long, device=device)
+    bool_mask = mask_fn(b, h, qq, kk)
+    dense = torch.zeros((seqlen, seqlen), dtype=dtype, device=device)
+    dense.masked_fill_(~bool_mask, float("-inf"))
+    return [dense]
+
+
 class LanceConfig(PretrainedConfig):
     def __init__(
         self,
@@ -140,10 +170,8 @@ class Lance(PreTrainedModel):
         current_attn_modes_ = ["full" if mode_ in ["full_noise", "full_noise_target"] else mode_ for mode_ in current_attn_modes]
         sparse_mask = create_sparse_mask(current_seq_len, current_split_lens, current_attn_modes_, device)
         current_seq_len_sum = sum(current_seq_len)
-        attention_mask = create_block_mask(
-                sparse_mask, B=1, H=self.num_heads, Q_LEN=current_seq_len_sum, KV_LEN=current_seq_len_sum, device=device, BLOCK_SIZE=BLOCK_SIZE, _compile=False
-            )
-        return attention_mask
+        # Dense mask List → SDPA branch in qwen2_navit.py (model-parallel safe).
+        return _flex_mask_to_dense_list(sparse_mask, current_seq_len_sum, device)
 
     def forward(
         self,
@@ -239,8 +267,9 @@ class Lance(PreTrainedModel):
         if nested_attention_masks is None:
             attn_modes_ = ["full" if mode=="full_noise" else mode for mode in attn_modes]
             sparse_mask = create_sparse_mask(sample_lens, split_lens, attn_modes_, packed_text_embedding.device)
-            seqlen = sum(sample_lens)
-            attention_mask = create_block_mask(sparse_mask, B=1, H=self.num_heads, Q_LEN=seqlen, KV_LEN=seqlen, device=packed_text_embedding.device, BLOCK_SIZE=BLOCK_SIZE, _compile=True)
+            seqlen = sum(sample_lens)  # 始终是max_num_tokens
+            # Dense mask List → SDPA branch (model-parallel safe).
+            attention_mask = _flex_mask_to_dense_list(sparse_mask, seqlen, packed_text_embedding.device)
         else:
             attention_mask = nested_attention_masks
 
@@ -907,7 +936,8 @@ class Lance(PreTrainedModel):
                 current_text_len = (step + 1) - (num_text_ids - 1)
                 current_split_lens_ = current_split_lens + [current_text_len, num_pad + 1 - current_text_len]
                 sparse_mask = create_sparse_mask(current_sample_lens, current_split_lens_, current_attn_modes_, device)
-                attention_mask = create_block_mask(sparse_mask, B=1, H=self.num_heads, Q_LEN=seqlen, KV_LEN=seqlen, device=device, BLOCK_SIZE=BLOCK_SIZE, _compile=False)
+                # Dense mask List → SDPA branch (model-parallel safe).
+                attention_mask = _flex_mask_to_dense_list(sparse_mask, seqlen, device)
 
                 extra_inputs = {"mode": "und"}
                 if self.use_moe:

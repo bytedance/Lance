@@ -5,7 +5,11 @@ cd "$SCRIPT_DIR"
 source "$SCRIPT_DIR/benchmarks/sample_env.sh"
 
 # ========================= Inference Parameters =========================
-NUM_GPUS=${NUM_GPUS:-1}
+# NUM_GPUS is the number of GPUs to *shard* Lance across (model-parallel), not the
+# number of replicas. Launch always runs a single process; the Python side uses
+# accelerate.dispatch_model to split the LLM's transformer layers across NUM_GPUS
+# cards. Default matches the 5×3060 host; override if running on fewer cards.
+NUM_GPUS=${NUM_GPUS:-5}
 
 TASK_NAME=${TASK_NAME:-x2t_image} # t2i | image_edit | t2v | i2v | video_edit | x2t_image | x2t_video
 
@@ -122,12 +126,13 @@ fi
 
 accelerate launch \
     --num_machines          $NUM_MACHINES \
-    --num_processes         $TOTAL_RANK \
+    --num_processes         1 \
     --machine_rank          $MACHINE_RANK \
     --main_process_ip       $MAIN_PROCESS_IP \
     --main_process_port     $MAIN_PROCESS_PORT \
     --mixed_precision       bf16 \
     inference_lance.py \
+    --shard_num_gpus        $NUM_GPUS \
     --model_path            "$MODEL_PATH" \
     --vit_type              qwen_2_5_vl_original \
     --llm_qk_norm           true \

@@ -34,7 +34,7 @@ from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVi
 import struct
 import numpy as np
 from safetensors.torch import load_file
-from accelerate import init_empty_weights
+from accelerate import init_empty_weights, dispatch_model
 from accelerate.utils import set_module_tensor_to_device
 
 from data.dataset_base import DataConfig, simple_custom_collate
@@ -135,6 +135,79 @@ def _resolve_lance_checkpoint(model_path_dir: str) -> str:
         "Download the full Lance_3B (or Lance_3B_Video) weights with:\n"
         '  hf download bytedance-research/Lance --local-dir downloads --include "Lance_3B/*"'
     )
+
+
+def _build_lance_device_map(model: "Lance", num_gpus: int) -> Dict[str, int]:
+    """Spread Lance's LLM transformer layers across `num_gpus` cards.
+
+    cuda:0 is the "entry/exit" device for tokens and logits (embed + lm_head + norm),
+    and the WanVideoVAE always auto-lands on cuda:0 (its constructor calls
+    `get_device()` = cuda:LOCAL_RANK, which is cuda:0 in single-process mode and can't
+    easily be moved post-hoc). Those fixed-cost residents eat ~3-4 GB on cuda:0 before
+    a single LLM layer lands there, so we explicitly give cuda:0 a *reduced* layer
+    share when num_gpus >= 2 and park the ViT on the last GPU (typically the lightest
+    after layer-count remainder).
+    """
+    num_layers = len(model.language_model.model.layers)
+    num_gpus = max(1, num_gpus)
+    device_map: Dict[str, int] = {}
+
+    if num_gpus == 1:
+        # Everything on cuda:0. Almost certainly won't fit Lance_3B + VAE on a single
+        # 12 GB card — but that's the user's choice (smoke-test scenario only).
+        for i in range(num_layers):
+            device_map[f"language_model.model.layers.{i}"] = 0
+    else:
+        # cuda:0 gets roughly half its even share; the remainder spreads across
+        # cuda:1..N-1. For 36 layers / 5 GPUs that's 3 on cuda:0 and 8-9 elsewhere.
+        gpu0_layer_count = max(1, num_layers // (2 * num_gpus))
+        remaining = num_layers - gpu0_layer_count
+        other_gpus = num_gpus - 1
+        layers_per_other = (remaining + other_gpus - 1) // other_gpus  # ceil-div
+        for i in range(num_layers):
+            if i < gpu0_layer_count:
+                device_map[f"language_model.model.layers.{i}"] = 0
+            else:
+                idx = i - gpu0_layer_count
+                gpu = 1 + min(idx // layers_per_other, other_gpus - 1)
+                device_map[f"language_model.model.layers.{i}"] = gpu
+
+    # Token entry/exit and both MoT norms pinned to cuda:0. `norm_moe_gen` is the
+    # generation-branch sibling of `norm`; it must be on the same device because the
+    # forward path indexes a shared sequence and dispatches by token type.
+    device_map["language_model.model.embed_tokens"] = 0
+    device_map["language_model.model.norm"] = 0
+    if hasattr(model.language_model.model, "norm_moe_gen"):
+        device_map["language_model.model.norm_moe_gen"] = 0
+    if hasattr(model.language_model.model, "rotary_emb"):
+        device_map["language_model.model.rotary_emb"] = 0
+    device_map["language_model.lm_head"] = 0
+
+    # Lance heads. Small (a few MB each) except latent_pos_embed (~250 MB sin-cos);
+    # keep them all near the embed/connector on cuda:0.
+    for extra in ("connector", "time_embedder", "vae2llm", "llm2vae",
+                  "latent_pos_embed", "task_embedding", "modality_embedding"):
+        if hasattr(model, extra) and getattr(model, extra) is not None:
+            device_map[extra] = 0
+
+    # ViT must live on cuda:0. Lance.validation_video_to_text combines ViT outputs
+    # with embed_tokens outputs via `masked_scatter` inline (lance.py:1010) — that
+    # combine happens in parent-class Python, not inside a submodule's forward(), so
+    # accelerate's hooks don't get a chance to align devices. cuda:0 now hosts only
+    # 3 LLM layers (instead of an even 8), so there's ~5 GB of headroom for the ViT
+    # (~1.2 GB) on top of the VAE/embed/lm_head residents.
+    if hasattr(model, "vit_model") and model.vit_model is not None:
+        device_map["vit_model"] = 0
+
+    # Safety net: any parameter not covered by an explicit prefix above (e.g. a future
+    # top-level MoT sibling we didn't anticipate) lands on cuda:0. Without this,
+    # accelerate.dispatch_model rejects the device_map with a hard error.
+    covered_prefixes = list(device_map.keys())
+    for param_name, _ in model.named_parameters():
+        if not any(param_name == p or param_name.startswith(p + ".") for p in covered_prefixes):
+            device_map[param_name] = 0
+
+    return device_map
 
 
 def _device_for_param(param_name: str, device_map: Dict[str, int]) -> int:
@@ -405,8 +478,9 @@ def validate_on_fixed_batch(
     save_path_gt: str = "",
 ):
     val_data = val_data_cpu.cuda(device).to_dict()
-    # No fsdp_model.to(device) needed: streaming load already placed weights on the
-    # target device in bf16.
+    # Do NOT call fsdp_model.to(device) here: the model is sharded across multiple GPUs
+    # via accelerate.dispatch_model, and .to() would collapse all shards onto one card.
+    # Weights are already bf16 from the streaming load.
 
     with torch.no_grad(), torch.amp.autocast("cuda", enabled=True, dtype=torch.bfloat16):
         # Compute padded_latent.
@@ -658,13 +732,14 @@ def main():
         )
     log_stage("Lance meta-init", stage_start)
 
-    # Single-device load: every tensor is routed onto the current device (cuda:DEVICE).
-    # `_device_for_param` defaults to 0 for any name not in `device_map`, so an empty
-    # map is enough here. (A follow-up change adds a smart device-map builder that
-    # spreads layers across multiple GPUs.)
-    device_map: Dict[str, int] = {}
+    # ===== Decide how to shard across GPUs. =====
+    num_visible_gpus = torch.cuda.device_count()
+    shard_n = inference_args.shard_num_gpus or num_visible_gpus
+    shard_n = max(1, min(shard_n, num_visible_gpus))
+    log_rank0(f"[startup] Sharding Lance across {shard_n} GPU(s) (visible: {num_visible_gpus})")
+    device_map = _build_lance_device_map(model, shard_n)
 
-    # ===== Stream-load weights directly onto the GPU at bf16. =====
+    # ===== Stream-load weights directly onto each shard's GPU at bf16. =====
     # ViT weights live in a separate file; in the Lance wrapper they sit under vit_model.*.
     if training_args.visual_und:
         vit_safetensors = osp.join(model_args.vit_path, "vit.safetensors")
@@ -704,8 +779,8 @@ def main():
 
     # init_moe() copies UND weights into the moe_gen slots. For inference from a fully-
     # trained Lance checkpoint, the moe_gen weights are already loaded above — running
-    # init_moe now would either no-op (good) or clobber them with random/loaded weights.
-    # Skip unconditionally on the meta-init path.
+    # init_moe now would either no-op (good) or clobber them with sharded cross-device
+    # state_dict() copies (bad). Skip unconditionally on the meta-init path.
     if training_args.copy_init_moe:
         log_rank0("[startup] Skipping init_moe(): full checkpoint already contains moe_gen weights.")
 
@@ -717,6 +792,8 @@ def main():
     log_stage("tokenizer load and special token init", stage_start, extra=f"num_new_tokens={num_new_tokens}")
 
     if num_new_tokens > 0:
+        # Embedding and lm_head are both pinned to cuda:0 in the device_map, so
+        # resize_token_embeddings can do its in-place resize without crossing devices.
         model.language_model.resize_token_embeddings(len(tokenizer))
         model.config.llm_config.vocab_size = len(tokenizer)
         model.language_model.config.vocab_size = len(tokenizer)
@@ -740,6 +817,12 @@ def main():
     else:
         assert model.language_model.get_input_embeddings().weight.data.data_ptr() != model.language_model.get_output_embeddings().weight.data.data_ptr(), 'tie_word_embeddings conflict'
 
+    # ===== Attach cross-device hooks so activations flow between shards. =====
+    # dispatch_model walks `device_map` and installs pre/post forward hooks that move
+    # activations to the right card before each submodule runs. After this point, the
+    # model must NOT be .to()'d as that would collapse the shards.
+    if shard_n > 1:
+        model = dispatch_model(model, device_map=device_map)
     model.eval()
     if vae_model is not None and hasattr(vae_model, "eval"):
         vae_model.eval()

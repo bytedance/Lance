@@ -307,6 +307,11 @@ class InferenceArguments(TrainingArguments):
     use_KVcache:                bool = False
     enhance_prompt:             bool = False  # Rewrite T2V prompts before inference when enabled.
 
+    # Model-parallel sharding for low-RAM hosts:
+    # 0 = use all visible GPUs (torch.cuda.device_count()).
+    # >0 = shard Lance's LLM layers across this many GPUs via accelerate.dispatch_model.
+    shard_num_gpus:             int = 0
+
 
 @dataclass
 class EvaluationArguments(InferenceArguments):

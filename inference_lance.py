@@ -266,8 +266,6 @@ def validate_on_fixed_batch(
 ):
     val_data = val_data_cpu.cuda(device).to_dict()
     fsdp_model = fsdp_model.to(device=device, dtype=torch.bfloat16)
-    offload_vae_during_denoise = bool(getattr(inference_args, "offload_vae_during_denoise", False))
-    vae_was_offloaded = False
 
     with torch.no_grad(), torch.amp.autocast("cuda", enabled=True, dtype=torch.bfloat16):
         # Compute padded_latent.

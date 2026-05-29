@@ -16,45 +16,25 @@ if __package__ in (None, ""):
 
 import openai
 
-
-# Replace the following few lines for the model you want to use.
-# Gemini example:
+# NOTE: Replace the following few lines for the model you want to use.
 API_KEY = "YOUR_API_KEY"
 MODEL_NAME = "gemini-3-pro-preview-new"
+BASE_URL = "https://api.openai.com/v1"
 MAX_TOKENS = 2048
 THINKING_ENABLED = False
 THINKING_BUDGET_TOKENS = 2000
 
-# Configure the client here. To switch to Doubao or GPT, replace only this
-# function body with one of the examples below.
+# Configure the client here. 
 def create_client(api_key: str | None = None):
-    return openai.AzureOpenAI(
+    return openai.OpenAI(
         api_key=api_key or API_KEY,
-        azure_endpoint="https://search.bytedance.net/gpt/openapi/online/v2/crawl",
-        api_version="2024-03-01-preview",
+        base_url=BASE_URL,
     )
 
-# Doubao example:
-# API_KEY = "YOUR_DOUBAO_API_KEY"
-# MODEL_NAME = "Doubao-Seed-1.8"
-# def create_client(api_key: str | None = None):
-#     return openai.OpenAI(
-#         base_url="https://ark-cn-beijing.bytedance.net/api/v3",
-#         api_key=api_key or API_KEY,
-#     )
-
-# GPT example:
-# API_KEY = "YOUR_OPENAI_API_KEY"
-# MODEL_NAME = "gpt-4o-mini"
-# def create_client(api_key: str | None = None):
-#     return openai.OpenAI(
-#         base_url="https://api.openai.com/v1",
-#         api_key=api_key or API_KEY,
-#     )
-
+# Default values for caption rewrite.
 TEMPERATURE = 0.3
 DEFAULT_STYLE_EXAMPLE_PATH = Path("config/examples/t2v_example.json")
-DEFAULT_FF2V_STYLE_EXAMPLE_PATH = Path("config/examples/ti2v_example.json")
+DEFAULT_I2V_STYLE_EXAMPLE_PATH = Path("config/examples/i2v_example.json")
 DEFAULT_NUM_STYLE_EXAMPLES = 6
 
 
@@ -129,8 +109,8 @@ Input prompt:
 Rewritten caption:"""
 
 
-def build_ff2v_rewrite_instruction(prompt: str, style_examples: List[str]) -> str:
-    """Build the image-conditioned FF2V rewrite instruction."""
+def build_i2v_rewrite_instruction(prompt: str, style_examples: List[str]) -> str:
+    """Build the image-conditioned I2V rewrite instruction."""
     examples_text = "\n\n".join(
         f"Style example {idx + 1}:\n{example}"
         for idx, example in enumerate(style_examples)
@@ -140,7 +120,7 @@ def build_ff2v_rewrite_instruction(prompt: str, style_examples: List[str]) -> st
 You are given an input text prompt and a reference image. Rewrite them into one polished English video prompt that matches the style of the reference examples.
 
 Requirements:
-- Use the reference examples from config/examples/ti2v_example.json as the target writing style.
+- Use the reference examples from config/examples/i2v_example.json as the target writing style.
 - Preserve the user's intended action and motion from the input text prompt.
 - Fully describe the visible content of the input image, including the main subject, appearance, pose, environment, lighting, materials, colors, spatial layout, and important background details.
 - The rewritten prompt must be grounded in the input image. Do not invent unrelated subjects, locations, or props that are not supported by either the image or the text prompt.
@@ -219,21 +199,21 @@ def rewrite_caption(
     )
 
 
-def rewrite_ff2v_prompt(
+def rewrite_i2v_prompt(
     prompt: str,
     image_path: str | Path,
-    style_example_path: str | Path = DEFAULT_FF2V_STYLE_EXAMPLE_PATH,
+    style_example_path: str | Path = DEFAULT_I2V_STYLE_EXAMPLE_PATH,
     num_style_examples: int = DEFAULT_NUM_STYLE_EXAMPLES,
     max_tokens: int = MAX_TOKENS,
     temperature: float = TEMPERATURE,
     llm_client=None,
     api_key: str | None = None,
 ) -> str:
-    """Rewrite an FF2V text prompt using the input image and TI2V style examples."""
+    """Rewrite an I2V text prompt using the input image and TI2V style examples."""
     if not prompt or not prompt.strip():
         raise ValueError("prompt must be a non-empty string.")
     style_examples = load_style_examples(style_example_path, num_style_examples)
-    instruction = build_ff2v_rewrite_instruction(prompt.strip(), style_examples)
+    instruction = build_i2v_rewrite_instruction(prompt.strip(), style_examples)
     content = [
         {"type": "text", "text": instruction},
         {"type": "image_url", "image_url": {"url": encode_image_as_data_url(image_path)}},
@@ -256,8 +236,8 @@ def rewrite_prompt(prompt: str, **kwargs) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Rewrite a caption with the configured chat model.")
     parser.add_argument("prompt", nargs="?", help="Input prompt to rewrite.")
-    parser.add_argument("--mode", choices=["t2v", "ff2v"], default="t2v", help="Rewrite mode.")
-    parser.add_argument("--image-path", default=None, help="Input image path for ff2v rewrite.")
+    parser.add_argument("--mode", choices=["t2v", "i2v"], default="t2v", help="Rewrite mode.")
+    parser.add_argument("--image-path", default=None, help="Input image path for i2v rewrite.")
     parser.add_argument("--prompt-file", default=None, help="Read the input prompt from a text file.")
     parser.add_argument("--style-example-path", default=str(DEFAULT_STYLE_EXAMPLE_PATH), help="Path to style reference JSON.")
     parser.add_argument("--num-style-examples", type=int, default=DEFAULT_NUM_STYLE_EXAMPLES, help="Number of style examples.")
@@ -275,15 +255,15 @@ def main() -> None:
     if not has_rewrite_api_key():
         parser.error("API_KEY is not configured. Set API_KEY and create_client() at the top of this file first.")
 
-    if args.mode == "ff2v":
+    if args.mode == "i2v":
         if not args.image_path:
-            parser.error("--image-path is required when --mode ff2v.")
+            parser.error("--image-path is required when --mode i2v.")
         style_example_path = (
             args.style_example_path
             if args.style_example_path != str(DEFAULT_STYLE_EXAMPLE_PATH)
-            else DEFAULT_FF2V_STYLE_EXAMPLE_PATH
+            else DEFAULT_I2V_STYLE_EXAMPLE_PATH
         )
-        rewritten = rewrite_ff2v_prompt(
+        rewritten = rewrite_i2v_prompt(
             prompt=prompt,
             image_path=args.image_path,
             style_example_path=style_example_path,

@@ -195,7 +195,7 @@ bash inference_lance.sh
 ```
 
 - Before running, please configure the inference parameters at the top of `inference_lance.sh`.
-- **Supported tasks:** `t2i`, `t2v`, `ff2v`, `image_edit`, `video_edit`, `x2t_image`, and `x2t_video`. You can modify `TASK_DEFAULT_CONFIGS` in `inference_lance.py` to customize the default data samples for each task.
+- **Supported tasks:** `t2i`, `t2v`, `i2v`, `image_edit`, `video_edit`, `x2t_image`, and `x2t_video`. You can modify `TASK_DEFAULT_CONFIGS` in `inference_lance.py` to customize the default data samples for each task.
 - **Note:** For all tasks, we recommend following the `prompt` format used in the provided examples when writing input prompts, as this typically leads to better generation quality.
 
 #### Task Examples
@@ -213,22 +213,22 @@ bash inference_lance.sh \
   --SAVE_PATH_GEN results/t2v
 ```
 
-##### Text-Image-to-Video (First-Frame-to-Video)
+##### Text-Image-to-Video 
 
 ```bash
 bash inference_lance.sh \
-  --TASK_NAME ff2v \
+  --TASK_NAME i2v \
   --MODEL_PATH downloads/Lance_3B_Video \
   --RESOLUTION video_480p \
   --NUM_FRAMES 61 \
   --VIDEO_HEIGHT 480 \
   --VIDEO_WIDTH 848 \
-  --SAVE_PATH_GEN results/ff2v
+  --SAVE_PATH_GEN results/i2v
 ```
 
 Optional parameters for video generation task examples:
 
-- `--ENHANCE_PROMPT true`: enable prompt rewrite for T2V/FF2V. Prompt enhancement generally improves generation quality. Before enabling it, set `API_KEY`, `MODEL_NAME`, and `client` in `common/utils/caption_rewrite.py`. If no API key is configured there, prompt rewrite is skipped; in that case, we recommend **writing prompts in the style of the provided examples**.
+- `--ENHANCE_PROMPT true`: enable prompt rewrite for T2V/I2V. Prompt enhancement generally improves generation quality. Before enabling it, set `API_KEY`, `MODEL_NAME`, and `client` in `common/utils/caption_rewrite.py`. If no API key is configured there, prompt rewrite is skipped; in that case, we recommend **writing prompts in the style of the provided examples**.
 
 ##### Text-to-Image
 
@@ -297,7 +297,7 @@ Optional parameters for all task examples:
 |------------------------|--------------------------------------------------|----------------------------------------------|
 | `t2v`                  | Text-to-Video generation                         | `config/examples/t2v_example.json`           |
 | `t2i`                  | Text-to-Image generation                         | `config/examples/t2i_example.json`           |
-| `ff2v`                 | First-Frame-to-Video generation                  | `config/examples/ti2v_example.json`          |
+| `i2v`                 | First-Frame-to-Video generation                  | `config/examples/i2v_example.json`          |
 | `image_edit`           | Image editing                                    | `config/examples/image_edit_example.json`    |
 | `video_edit`           | Video editing                                    | `config/examples/video_edit_example.json`    |
 | `x2t_image`            | Image understanding            | `config/examples/x2t_image_example.json`    |
@@ -324,7 +324,7 @@ You can configure the following hyperparameters at the top of the `inference_lan
 | `VIDEO_HEIGHT` / `VIDEO_WIDTH`| `768` | Spatial resolution. *Unused for editing tasks (determined by input image/video).* |
 | `RESOLUTION` | `"video_480p"` | Base resolution preset (`image_768res` or `video_480p`). |
 | `CONFIG_PATH` | `""` | Optional path to a custom validation JSON/JSONL file. When empty, the task default example config is used. |
-| `ENHANCE_PROMPT` | `false` | Optional T2V/FF2V prompt rewrite switch. T2V uses text-only rewrite; FF2V uses text plus the input image. Prompt enhancement generally improves generation quality. Configure the rewrite API key and client in `common/utils/caption_rewrite.py` before setting this to `true`; without a key, we recommend writing prompts in the style of the provided examples. |
+| `ENHANCE_PROMPT` | `false` | Optional T2V/I2V prompt rewrite switch. T2V uses text-only rewrite; I2V uses text plus the input image. Prompt enhancement generally improves generation quality. Configure the rewrite API key and client in `common/utils/caption_rewrite.py` before setting this to `true`; without a key, we recommend writing prompts in the style of the provided examples. |
 
 </details>
 

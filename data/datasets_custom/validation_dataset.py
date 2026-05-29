@@ -231,25 +231,25 @@ class ValidationDataset(Dataset):
         print(f"[enhance_prompt][t2v][rewritten] {enhanced_prompt}")
         return enhanced_prompt
 
-    def _maybe_enhance_ff2v_prompt(self, prompt: str, image_path: str) -> str:
-        if "ff2v" not in self.data_config.task:
+    def _maybe_enhance_i2v_prompt(self, prompt: str, image_path: str) -> str:
+        if "i2v" not in self.data_config.task:
             return prompt
         if not getattr(self.data_config, "enhance_prompt", False):
             return prompt
 
-        from common.utils.caption_rewrite import has_rewrite_api_key, rewrite_ff2v_prompt
+        from common.utils.caption_rewrite import has_rewrite_api_key, rewrite_i2v_prompt
 
         if not has_rewrite_api_key():
             return prompt
 
         try:
-            enhanced_prompt = rewrite_ff2v_prompt(prompt, image_path=image_path)
+            enhanced_prompt = rewrite_i2v_prompt(prompt, image_path=image_path)
         except Exception as exc:
-            print(f"[enhance_prompt][ff2v][warning] prompt rewrite failed, use original prompt. error={exc}")
+            print(f"[enhance_prompt][i2v][warning] prompt rewrite failed, use original prompt. error={exc}")
             return prompt
-        print(f"[enhance_prompt][ff2v][image] {image_path}")
-        print(f"[enhance_prompt][ff2v][original] {prompt}")
-        print(f"[enhance_prompt][ff2v][rewritten] {enhanced_prompt}")
+        print(f"[enhance_prompt][i2v][image] {image_path}")
+        print(f"[enhance_prompt][i2v][original] {prompt}")
+        print(f"[enhance_prompt][i2v][rewritten] {enhanced_prompt}")
         return enhanced_prompt
 
     def __len__(self) -> int:
@@ -983,7 +983,7 @@ class ValidationDataset(Dataset):
             None,
         )
         if text_idx is not None and image_idx is not None:
-            interleave_array[text_idx] = self._maybe_enhance_ff2v_prompt(
+            interleave_array[text_idx] = self._maybe_enhance_i2v_prompt(
                 interleave_array[text_idx],
                 image_path=interleave_array[image_idx],
             )
@@ -1222,7 +1222,7 @@ class ValidationDataset(Dataset):
         elif 'idip' in task or task == "ti2v":  # Video IDIP, Image IDIP or TI2V
             self.sample_task = 'idip'
             return self.tiv2v_sample(idx)
-        elif "ff2v" in task:  # Text-Image-to-Video (First Frame to Video)
+        elif "i2v" in task:  # Text-Image-to-Video
             self.sample_task = 't2v'
             return self.ff2v_sample(idx)
         elif task in ["x2t", "x2t_image", "x2t_video"]:  # Multi-modal Understanding

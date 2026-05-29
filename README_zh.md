@@ -194,7 +194,7 @@ bash inference_lance.sh
 ```
 
 - 运行前，请先在 `inference_lance.sh` 顶部配置推理参数。
-- **支持任务：** `t2i`、`t2v`、`ff2v`、`image_edit`、`video_edit`、`x2t_image` 和 `x2t_video`。你也可以在 `inference_lance.py` 中修改 `TASK_DEFAULT_CONFIGS`，自定义每个任务默认使用的数据样例。
+- **支持任务：** `t2i`、`t2v`、`i2v`、`image_edit`、`video_edit`、`x2t_image` 和 `x2t_video`。你也可以在 `inference_lance.py` 中修改 `TASK_DEFAULT_CONFIGS`，自定义每个任务默认使用的数据样例。
 - **注意：** 对于所有任务，建议在编写输入 prompt 时参考提供示例中的 `prompt` 格式，这通常有助于获得更好的生成效果。
 
 
@@ -217,18 +217,18 @@ bash inference_lance.sh \
 
 ```bash
 bash inference_lance.sh \
-  --TASK_NAME ff2v \
+  --TASK_NAME i2v \
   --MODEL_PATH downloads/Lance_3B_Video \
   --RESOLUTION video_480p \
   --NUM_FRAMES 61 \
   --VIDEO_HEIGHT 480 \
   --VIDEO_WIDTH 848 \
-  --SAVE_PATH_GEN results/ff2v
+  --SAVE_PATH_GEN results/i2v
 ```
 
 生成任务可选参数：
 
-- `--ENHANCE_PROMPT true`：启用 T2V/FF2V prompt rewrite。prompt enhance rewrite 通常能提升生成效果。启用前请先在 `common/utils/caption_rewrite.py` 中配置 `API_KEY`、`MODEL_NAME` 和 `client`；如果没有配置有效 key，会自动跳过 prompt rewrite，此时建议尽量参考提供示例中的 prompt 风格手写输入。
+- `--ENHANCE_PROMPT true`：启用 T2V/I2V prompt rewrite。prompt enhance rewrite 通常能提升生成效果。启用前请先在 `common/utils/caption_rewrite.py` 中配置 `API_KEY`、`MODEL_NAME` 和 `client`；如果没有配置有效 key，会自动跳过 prompt rewrite，此时建议尽量参考提供示例中的 prompt 风格手写输入。
 
 ##### 文生图
 
@@ -296,7 +296,7 @@ bash inference_lance.sh \
 |------------------------|--------------------------------------------------|----------------------------------------------|
 | `t2v` | 文生视频 | `config/examples/t2v_example.json` |
 | `t2i` | 文生图 | `config/examples/t2i_example.json` |
-| `ff2v` | 首帧到视频生成 | `config/examples/ti2v_example.json` |
+| `i2v` | 首帧到视频生成 | `config/examples/i2v_example.json` |
 | `image_edit` | 图像编辑 | `config/examples/image_edit_example.json` |
 | `video_edit` | 视频编辑 | `config/examples/video_edit_example.json` |
 | `x2t_image` | 图像理解 | `config/examples/x2t_image_example.json` |
@@ -323,7 +323,7 @@ bash inference_lance.sh \
 | `VIDEO_HEIGHT` / `VIDEO_WIDTH`| `768` | 空间分辨率。*编辑任务不使用该参数（由输入图像/视频决定）。* |
 | `RESOLUTION` | `"video_480p"` | 基础分辨率预设（如 `image_768res` 或 `video_480p`）。 |
 | `CONFIG_PATH` | `""` | 可选的自定义验证 JSON/JSONL 文件路径。为空时使用任务默认示例配置。 |
-| `ENHANCE_PROMPT` | `false` | 可选的 T2V/FF2V prompt rewrite 开关。T2V 使用纯文本 rewrite，FF2V 使用文本加输入图像 rewrite。prompt enhance rewrite 通常能提升生成效果。启用前请先在 `common/utils/caption_rewrite.py` 中配置 API key 和 client；如果没有 key，建议尽量参考提供示例中的 prompt 风格手写输入。 |
+| `ENHANCE_PROMPT` | `false` | 可选的 T2V/I2V prompt rewrite 开关。T2V 使用纯文本 rewrite，I2V 使用文本加输入图像 rewrite。prompt enhance rewrite 通常能提升生成效果。启用前请先在 `common/utils/caption_rewrite.py` 中配置 API key 和 client；如果没有 key，建议尽量参考提供示例中的 prompt 风格手写输入。 |
 
 </details>
 

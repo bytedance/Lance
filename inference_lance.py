@@ -60,7 +60,7 @@ RESULT_JSON_FILENAME = "result.json"
 INTERNAL_VALIDATION_MAX_SAMPLES = 100000
 TASK_T2V = "t2v"
 TASK_T2I = "t2i"
-TASK_FF2V = "ff2v"
+TASK_I2V = "i2v"
 TASK_X2T_IMAGE = "x2t_image"
 TASK_X2T_VIDEO = "x2t_video"
 TASK_IMAGE_EDIT = "image_edit"
@@ -68,7 +68,7 @@ TASK_VIDEO_EDIT = "video_edit"
 GENERATION_TASKS = {
     TASK_T2V,
     TASK_T2I,
-    TASK_FF2V,
+    TASK_I2V,
     TASK_IMAGE_EDIT,
     TASK_VIDEO_EDIT,
 }
@@ -87,10 +87,10 @@ TASK_DEFAULT_CONFIGS = {
         "example_json": "config/examples/t2v_example.json",
         "save_path_prefix": "results/t2v_sample",
     },
-    TASK_FF2V: {
+    TASK_I2V: {
         "model_family": "video",
-        "example_json": "config/examples/ti2v_example.json",
-        "save_path_prefix": "results/ff2v_sample",
+        "example_json": "config/examples/i2v_example.json",
+        "save_path_prefix": "results/i2v_sample",
     },
     TASK_IMAGE_EDIT: {
         "model_family": "image",
@@ -321,7 +321,7 @@ def validate_on_fixed_batch(
 
             # Decode.
             for i_val, latent in enumerate(denoise_latent):
-                if inference_args.task in {TASK_FF2V, TASK_IMAGE_EDIT, TASK_VIDEO_EDIT}:
+                if inference_args.task in {TASK_I2V, TASK_IMAGE_EDIT, TASK_VIDEO_EDIT}:
                     target_latents = [latent[-1]]
                 else:
                     target_latents = latent
@@ -589,8 +589,8 @@ def main():
     dataset_config.text_template = inference_args.text_template
     dataset_config.enhance_prompt = inference_args.enhance_prompt
     if inference_args.enhance_prompt:
-        if inference_args.task not in {TASK_T2V, TASK_FF2V}:
-            log_rank0("[startup] enhance_prompt is enabled but only applies to t2v and ff2v; skipping prompt rewrite for this task.")
+        if inference_args.task not in {TASK_T2V, TASK_I2V}:
+            log_rank0("[startup] enhance_prompt is enabled but only applies to t2v and i2v; skipping prompt rewrite for this task.")
         else:
             log_rank0(f"[startup] enhance_prompt is enabled for {inference_args.task} prompts. Configure API_KEY in common/utils/caption_rewrite.py.")
     val_dataset = ValidationDataset(

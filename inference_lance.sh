@@ -7,7 +7,7 @@ source "$SCRIPT_DIR/benchmarks/sample_env.sh"
 # ========================= Inference Parameters =========================
 NUM_GPUS=${NUM_GPUS:-1}
 
-TASK_NAME=${TASK_NAME:-x2t_image} # t2i | image_edit | t2v | ti2v | ff2v | video_edit | x2t_image | x2t_video
+TASK_NAME=${TASK_NAME:-x2t_image} # t2i | image_edit | t2v | i2v | video_edit | x2t_image | x2t_video
 
 VALIDATION_NUM_TIMESTEPS=${VALIDATION_NUM_TIMESTEPS:-30}
 VALIDATION_TIMESTEP_SHIFT=${VALIDATION_TIMESTEP_SHIFT:-3.5}
@@ -54,7 +54,7 @@ while [[ $# -gt 0 ]]; do
             echo "  bash inference_lance_my.sh --TASK_NAME t2i --MODEL_PATH downloads/Lance_3B --RESOLUTION image_768res"
             echo "  bash inference_lance_my.sh --TASK_NAME image_edit --CONFIG_PATH config.json"
             echo "  bash inference_lance_my.sh --TASK_NAME t2v --ENHANCE_PROMPT true"
-            echo "  bash inference_lance_my.sh --TASK_NAME ff2v --ENHANCE_PROMPT true"
+            echo "  bash inference_lance_my.sh --TASK_NAME i2v --ENHANCE_PROMPT true"
             exit 0
             ;;
 

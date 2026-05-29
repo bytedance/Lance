@@ -24,13 +24,18 @@ os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 import os.path as osp
 from copy import deepcopy
 import json
-from typing import Tuple, cast, Optional
+from typing import Tuple, cast, Optional, Dict, List
 import torch
 import torch.distributed as dist
+from torch import nn
 from torch.utils.data import DataLoader
 from transformers import HfArgumentParser, set_seed
 from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
+import struct
+import numpy as np
 from safetensors.torch import load_file
+from accelerate import init_empty_weights
+from accelerate.utils import set_module_tensor_to_device
 
 from data.dataset_base import DataConfig, simple_custom_collate
 from data.data_utils import add_special_tokens
@@ -114,35 +119,170 @@ TASK_DEFAULT_CONFIGS = {
     },
 }
 
-def init_from_model_path_if_needed(model: Qwen2ForCausalLM, model_args: ModelArguments):
-    # Always load the trained Lance checkpoint from model_path.
-    path_dir = model_args.model_path
-    ema_path = osp.join(path_dir, "ema.safetensors")
-    model_path = osp.join(path_dir, "model.safetensors")
+# Names of buffers/params that the original codepath intentionally popped from the
+# checkpoint before load (they are fixed sin-cos embeddings rebuilt per resolution).
+_POPPED_FROM_CHECKPOINT = frozenset({"latent_pos_embed.pos_embed"})
 
 
-    model_path_ft = None
-    if osp.exists(model_path):
-        model_path_ft = model_path
-    elif osp.exists(ema_path):
-        model_path_ft = ema_path
+def _resolve_lance_checkpoint(model_path_dir: str) -> str:
+    """Return the path of the Lance checkpoint to load (preferring model.safetensors)."""
+    for fname in ("model.safetensors", "ema.safetensors"):
+        cand = osp.join(model_path_dir, fname)
+        if osp.exists(cand):
+            return cand
+    raise FileNotFoundError(
+        f"No Lance checkpoint ('model.safetensors' or 'ema.safetensors') found in {model_path_dir}. "
+        "Download the full Lance_3B (or Lance_3B_Video) weights with:\n"
+        '  hf download bytedance-research/Lance --local-dir downloads --include "Lance_3B/*"'
+    )
 
-    if model_path_ft:
-        model_state_dict = load_file(model_path_ft, device="cpu")
-    else:
-        raise FileNotFoundError(
-            f"Fine-tuning failed: No valid checkpoint ('ema.safetensors' or 'model.safetensors') found in {path_dir}"
+
+def _device_for_param(param_name: str, device_map: Dict[str, int]) -> int:
+    """Find the device assignment for `param_name` by walking up its dotted path."""
+    parts = param_name.split(".")
+    for i in range(len(parts), 0, -1):
+        prefix = ".".join(parts[:i])
+        if prefix in device_map:
+            return device_map[prefix]
+    return 0  # default to cuda:0 for any unmapped params (Lance has very few)
+
+
+# safetensors dtype string -> (numpy dtype used to read raw bytes, optional torch view dtype)
+# bf16 has no native numpy dtype, so we read as uint16 then bit-cast via tensor.view().
+_SAFE_DTYPE_MAP = {
+    "F64":  (np.float64, None),
+    "F32":  (np.float32, None),
+    "F16":  (np.float16, None),
+    "BF16": (np.uint16,  torch.bfloat16),
+    "I64":  (np.int64,   None),
+    "I32":  (np.int32,   None),
+    "I16":  (np.int16,   None),
+    "I8":   (np.int8,    None),
+    "U8":   (np.uint8,   None),
+    "BOOL": (np.bool_,   None),
+}
+
+
+def _read_safetensors_header(f) -> Tuple[Dict, int]:
+    """Read the 8-byte length + JSON header. Returns (header_dict, data_section_offset)."""
+    header_len_bytes = f.read(8)
+    if len(header_len_bytes) != 8:
+        raise ValueError(f"Truncated safetensors file: only {len(header_len_bytes)}/8 length bytes")
+    (header_len,) = struct.unpack("<Q", header_len_bytes)
+    header_bytes = f.read(header_len)
+    if len(header_bytes) != header_len:
+        raise ValueError(f"Truncated safetensors header: got {len(header_bytes)}/{header_len}")
+    return json.loads(header_bytes), 8 + header_len
+
+
+def _read_safetensors_tensor(f, meta: dict, data_section_offset: int) -> torch.Tensor:
+    """Read one tensor's bytes via plain seek+read (no mmap) and return a CPU torch tensor."""
+    start, end = meta["data_offsets"]
+    nbytes = end - start
+    f.seek(data_section_offset + start)
+    raw = f.read(nbytes)
+    if len(raw) != nbytes:
+        raise ValueError(f"Short read: got {len(raw)}/{nbytes} bytes")
+    np_dtype, view_dtype = _SAFE_DTYPE_MAP[meta["dtype"]]
+    # .copy() detaches from the read-only `raw` bytes so the buffer can be freed before
+    # we keep the torch tensor around. Peak CPU memory: one tensor at a time.
+    np_arr = np.frombuffer(raw, dtype=np_dtype).copy().reshape(meta["shape"])
+    del raw
+    tensor = torch.from_numpy(np_arr)
+    if view_dtype is not None:
+        tensor = tensor.view(view_dtype)
+    return tensor
+
+
+def _stream_load_into(
+    model: nn.Module,
+    safetensors_path: str,
+    device_map: Dict[str, int],
+    key_prefix: str = "",
+    skip_keys: frozenset = frozenset(),
+    dtype: torch.dtype = torch.bfloat16,
+) -> Tuple[List[str], List[str]]:
+    """Stream safetensors into `model`, one tensor at a time, directly onto GPU shards.
+
+    Uses plain `open() + seek() + read()` rather than `safetensors.safe_open()` because
+    safe_open mmaps the whole file (12 GB for Lance_3B) — the kernel's overcommit policy
+    rejects that on the 8 GB host. With direct IO peak CPU RAM is one tensor at a time
+    (worst case ~1.2 GB for the embedding layer at fp32, briefly).
+
+    `key_prefix` is prepended to each safetensors key when looking up the target
+    parameter in `model` — the ViT file stores bare keys; they live under `vit_model.*`
+    in the Lance wrapper.
+    """
+    loaded: List[str] = []
+    unknown: List[str] = []
+    model_keys = set(dict(model.named_parameters()).keys()) | set(dict(model.named_buffers()).keys())
+    with open(safetensors_path, "rb") as f:
+        header, data_section_offset = _read_safetensors_header(f)
+        for key, meta in header.items():
+            if key == "__metadata__":
+                continue
+            full_name = f"{key_prefix}{key}"
+            if full_name in skip_keys:
+                continue
+            if full_name not in model_keys:
+                unknown.append(full_name)
+                continue
+            tensor = _read_safetensors_tensor(f, meta, data_section_offset).to(dtype)
+            device = _device_for_param(full_name, device_map)
+            # Pass dtype= explicitly: without it, set_module_tensor_to_device casts
+            # `value` to `old_value.dtype` to match the meta tensor's nominal dtype
+            # (which is fp32 from init_empty_weights' default). That silently upcasts
+            # our bf16 tensors back to fp32, doubling VRAM and breaking the autocast
+            # path (fp32 weights * bf16 activations → fp32 output, then index-put into
+            # a bf16 destination crashes with a dtype-mismatch error).
+            set_module_tensor_to_device(model, full_name, device, value=tensor, dtype=dtype)
+            loaded.append(full_name)
+            del tensor
+    return loaded, unknown
+
+
+def _materialize_remaining_meta(model: "Lance", device_map: Dict[str, int], dtype: torch.dtype):
+    """Allocate any still-meta params on their target devices and re-init the
+    fixed sin-cos position embeddings (which were popped from the checkpoint)."""
+    from modeling.lance.modeling_utils import PositionEmbedding, PositionEmbedding3D
+
+    materialized = []
+    for name, param in list(model.named_parameters()):
+        if not param.is_meta:
+            continue
+        device = _device_for_param(name, device_map)
+        # Walk to the owning module to swap the meta param for a real one.
+        *mod_parts, attr = name.split(".")
+        owner = model
+        for m in mod_parts:
+            owner = getattr(owner, m)
+        new_param = torch.nn.Parameter(
+            torch.zeros(param.shape, dtype=dtype, device=f"cuda:{device}"),
+            requires_grad=param.requires_grad,
         )
+        setattr(owner, attr, new_param)
+        materialized.append(name)
 
-    # NOTE: position embeds are fixed sinusoidal embeddings, so we can just pop it off,
-    # which makes it easier to adapt to different resolutions.
-    if 'latent_pos_embed.pos_embed' in model_state_dict:
-        model_state_dict.pop('latent_pos_embed.pos_embed')
+    # Same for any buffers that ended up meta (rare; defensive).
+    for name, buf in list(model.named_buffers()):
+        if not buf.is_meta:
+            continue
+        device = _device_for_param(name, device_map)
+        *mod_parts, attr = name.split(".")
+        owner = model
+        for m in mod_parts:
+            owner = getattr(owner, m)
+        owner.register_buffer(
+            attr, torch.zeros(buf.shape, dtype=buf.dtype, device=f"cuda:{device}")
+        )
+        materialized.append(name)
 
-    msg = model.load_state_dict(model_state_dict, strict=False)  # strict = True | False
-    clean_memory(model_state_dict)
+    # Re-run the sin-cos init now that the param tensors are real.
+    for sub in model.modules():
+        if isinstance(sub, (PositionEmbedding, PositionEmbedding3D)):
+            sub._init_weights()
 
-    return msg
+    return materialized
 
 
 def clean_memory(*objects):
@@ -265,7 +405,8 @@ def validate_on_fixed_batch(
     save_path_gt: str = "",
 ):
     val_data = val_data_cpu.cuda(device).to_dict()
-    fsdp_model = fsdp_model.to(device=device, dtype=torch.bfloat16)
+    # No fsdp_model.to(device) needed: streaming load already placed weights on the
+    # target device in bf16.
 
     with torch.no_grad(), torch.amp.autocast("cuda", enabled=True, dtype=torch.bfloat16):
         # Compute padded_latent.
@@ -450,11 +591,19 @@ def main():
     llm_config.freeze_und = training_args.freeze_und
     llm_config.apply_qwen_2_5_vl_pos_emb = training_args.apply_qwen_2_5_vl_pos_emb
 
+    # ===== Meta-init: build the module skeleton with zero CPU RAM. =====
+    # The bare Qwen2ForCausalLM(llm_config) call used to materialize a full fp32 3B
+    # model on CPU (~12 GB), which is the load step that OOM-killed an 8 GB box.
+    # Under init_empty_weights() every nn.Parameter is created on the "meta" device
+    # (shape only, no storage), so this whole block stays at near-zero RAM.
     stage_start = time.perf_counter()
-    log_rank0(f"[startup] Initializing LLM weights: {model_args.model_path}")
-    language_model: Qwen2ForCausalLM = Qwen2ForCausalLM(llm_config)
-    log_stage("LLM weight init", stage_start)
+    log_rank0(f"[startup] Meta-initializing LLM: {model_args.model_path}")
+    with init_empty_weights():
+        language_model: Qwen2ForCausalLM = Qwen2ForCausalLM(llm_config)
+    log_stage("LLM meta-init", stage_start)
 
+    vit_model = None
+    vit_config = None
     if training_args.visual_und:
         if model_args.vit_type in ("qwen2_5_vl", "qwen_2_5_vl_original"):
             stage_start = time.perf_counter()
@@ -463,17 +612,16 @@ def main():
             log_stage("VIT config load", stage_start)
 
             stage_start = time.perf_counter()
-            log_rank0(f"[startup] Loading VIT weights: {osp.join(model_args.vit_path, 'vit.safetensors')}")
-            vit_model = Qwen2_5_VisionTransformerPretrainedModel(vit_config)
-            vit_weights = load_file(osp.join(model_args.vit_path, "vit.safetensors"))
-            vit_model.load_state_dict(vit_weights, strict=True)
-            log_stage("VIT weight load", stage_start)
+            log_rank0("[startup] Meta-initializing VIT (weights loaded later from vit.safetensors)")
+            with init_empty_weights():
+                vit_model = Qwen2_5_VisionTransformerPretrainedModel(vit_config)
+            log_stage("VIT meta-init", stage_start)
         else:
             raise ValueError(f"Unsupported vit_type: {model_args.vit_type}")
 
-        clean_memory(vit_weights)
-
     if training_args.visual_gen:
+        # WanVideoVAE itself uses torch.device("meta") + assign-load internally, so it
+        # doesn't contribute to the CPU RAM spike. Built eagerly so vae_config is real.
         stage_start = time.perf_counter()
         log_rank0("[startup] Initializing VAE")
         vae_model = WanVideoVAE()
@@ -483,7 +631,6 @@ def main():
         vae_model = None
         vae_config = None
 
-    # Lance configuration
     config = LanceConfig(
         visual_gen=training_args.visual_gen,
         visual_und=training_args.visual_und,
@@ -498,33 +645,77 @@ def main():
         interpolate_pos=model_args.interpolate_pos,
         timestep_shift=training_args.timestep_shift,
     )
-    model: Lance = Lance(
-        language_model=language_model,
-        vit_model=vit_model if training_args.visual_und else None,
-        vit_type=model_args.vit_type,
-        config=config,
-        training_args=training_args,
-    )
-    stage_start = time.perf_counter()
-    log_rank0(f"[startup] Moving Lance model to GPU {DEVICE}")
-    model = model.to(DEVICE)
-    log_stage("Lance model move to GPU", stage_start)
 
-    # Setup tokenizer for model:
+    stage_start = time.perf_counter()
+    log_rank0("[startup] Meta-initializing Lance wrapper")
+    with init_empty_weights():
+        model: Lance = Lance(
+            language_model=language_model,
+            vit_model=vit_model if training_args.visual_und else None,
+            vit_type=model_args.vit_type,
+            config=config,
+            training_args=training_args,
+        )
+    log_stage("Lance meta-init", stage_start)
+
+    # Single-device load: every tensor is routed onto the current device (cuda:DEVICE).
+    # `_device_for_param` defaults to 0 for any name not in `device_map`, so an empty
+    # map is enough here. (A follow-up change adds a smart device-map builder that
+    # spreads layers across multiple GPUs.)
+    device_map: Dict[str, int] = {}
+
+    # ===== Stream-load weights directly onto the GPU at bf16. =====
+    # ViT weights live in a separate file; in the Lance wrapper they sit under vit_model.*.
+    if training_args.visual_und:
+        vit_safetensors = osp.join(model_args.vit_path, "vit.safetensors")
+        stage_start = time.perf_counter()
+        log_rank0(f"[startup] Streaming VIT weights from {vit_safetensors}")
+        vit_loaded, vit_unknown = _stream_load_into(
+            model, vit_safetensors, device_map, key_prefix="vit_model.", dtype=torch.bfloat16,
+        )
+        log_stage("VIT streaming load", stage_start,
+                  extra=f"loaded={len(vit_loaded)} unknown={len(vit_unknown)}")
+        if vit_unknown:
+            log_rank0(f"[startup] WARNING: {len(vit_unknown)} ViT key(s) had no matching param "
+                      f"(first few: {vit_unknown[:5]})")
+
+    # The main Lance checkpoint: covers language_model.*, the connector / vae<->llm /
+    # time_embedder / latent_pos_embed (popped) / etc. Skip the popped sin-cos buffer.
+    lance_ckpt = _resolve_lance_checkpoint(model_args.model_path)
+    stage_start = time.perf_counter()
+    log_rank0(f"[startup] Streaming Lance checkpoint from {lance_ckpt}")
+    main_loaded, main_unknown = _stream_load_into(
+        model, lance_ckpt, device_map, skip_keys=_POPPED_FROM_CHECKPOINT, dtype=torch.bfloat16,
+    )
+    log_stage("Lance streaming load", stage_start,
+              extra=f"loaded={len(main_loaded)} unknown={len(main_unknown)}")
+    if main_unknown:
+        # Many Lance training-time keys (optimizer state, etc.) may not exist on the
+        # inference model; informational, not fatal.
+        log_rank0(f"[startup] NOTE: {len(main_unknown)} checkpoint key(s) had no matching param "
+                  f"(first few: {main_unknown[:5]})")
+
+    # Anything still meta (the popped sin-cos pos_embed, any non-checkpointed buffer)
+    # gets allocated on its target device and re-initialized to the right values.
+    materialized = _materialize_remaining_meta(model, device_map, dtype=torch.bfloat16)
+    if materialized:
+        log_rank0(f"[startup] Materialized {len(materialized)} meta param/buffer(s) post-load "
+                  f"(first few: {materialized[:5]})")
+
+    # init_moe() copies UND weights into the moe_gen slots. For inference from a fully-
+    # trained Lance checkpoint, the moe_gen weights are already loaded above — running
+    # init_moe now would either no-op (good) or clobber them with random/loaded weights.
+    # Skip unconditionally on the meta-init path.
+    if training_args.copy_init_moe:
+        log_rank0("[startup] Skipping init_moe(): full checkpoint already contains moe_gen weights.")
+
+    # ===== Tokenizer + post-load patch-ups. =====
     stage_start = time.perf_counter()
     log_rank0(f"[startup] Loading tokenizer: {model_args.model_path}")
     tokenizer: Qwen2Tokenizer = Qwen2Tokenizer.from_pretrained(model_args.model_path)
-
     tokenizer, new_token_ids, num_new_tokens = add_special_tokens(tokenizer)
     log_stage("tokenizer load and special token init", stage_start, extra=f"num_new_tokens={num_new_tokens}")
 
-    # Initialize MoE before loading the checkpoint.
-    if training_args.copy_init_moe:
-        language_model.init_moe()
-
-    init_from_model_path_if_needed(model, model_args)
-
-    # Resize afterward to avoid checkpoint shape mismatches or overwritten weights.
     if num_new_tokens > 0:
         model.language_model.resize_token_embeddings(len(tokenizer))
         model.config.llm_config.vocab_size = len(tokenizer)
@@ -534,7 +725,7 @@ def main():
         from common.model.hacks import hack_qwen2_5_vl_config
         language_model = hack_qwen2_5_vl_config(language_model)
 
-    image_token_id = language_model.config.video_token_id # image_token_id # <|image_pad|>
+    image_token_id = language_model.config.video_token_id  # <|image_pad|>
     new_token_ids.update({"image_token_id": image_token_id})
     model.update_tokenizer(tokenizer=tokenizer)
 
@@ -549,7 +740,6 @@ def main():
     else:
         assert model.language_model.get_input_embeddings().weight.data.data_ptr() != model.language_model.get_output_embeddings().weight.data.data_ptr(), 'tie_word_embeddings conflict'
 
-    model = model.to(device=DEVICE, dtype=torch.bfloat16)
     model.eval()
     if vae_model is not None and hasattr(vae_model, "eval"):
         vae_model.eval()

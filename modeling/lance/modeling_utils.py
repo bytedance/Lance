@@ -160,6 +160,51 @@ class MLPconnector(nn.Module):
         return hidden_states
 
 
+def _torch_1d_sincos(dim: int, pos: torch.Tensor) -> torch.Tensor:
+    """Torch port of get_1d_sincos_pos_embed_from_grid; runs on pos.device in fp32."""
+    assert dim % 2 == 0
+    device = pos.device
+    omega = torch.arange(dim // 2, dtype=torch.float32, device=device)
+    omega = 1.0 / (10000.0 ** (omega / (dim / 2.0)))  # (D/2,)
+    out = pos.reshape(-1)[:, None] * omega[None, :]  # (M, D/2)
+    return torch.cat([torch.sin(out), torch.cos(out)], dim=1)  # (M, D)
+
+
+def _torch_2d_sincos(embed_dim: int, grid_size: int, device, dtype) -> torch.Tensor:
+    grid_h = torch.arange(grid_size, dtype=torch.float32, device=device)
+    grid_w = torch.arange(grid_size, dtype=torch.float32, device=device)
+    # `np.meshgrid(grid_w, grid_h)` puts width first; torch's `indexing="xy"` matches that.
+    gw, gh = torch.meshgrid(grid_w, grid_h, indexing="xy")
+    emb_h = _torch_1d_sincos(embed_dim // 2, gh.flatten())
+    emb_w = _torch_1d_sincos(embed_dim // 2, gw.flatten())
+    return torch.cat([emb_h, emb_w], dim=1).to(dtype)
+
+
+def _torch_3d_sincos(embed_dim: int, t: int, h: int, w: int, device, dtype) -> torch.Tensor:
+    """Torch port of get_3d_sincos_pos_embed; computes on `device` in fp32.
+
+    The numpy original allocates three intermediate fp64 arrays of shape (t*h*w, ~D/3)
+    each plus a concatenated copy, peaking around 4 GB of CPU RAM for Lance's defaults
+    (t=31, h=w=64, D=2048). Doing the same work in fp32 on a GPU is ~free and avoids
+    the spike that OOMs the 8 GB host post-load.
+    """
+    assert embed_dim % 2 == 0
+    d = embed_dim // 3
+    d = d if d % 2 == 0 else d - 1
+    dim_t, dim_h = d, d
+    dim_w = embed_dim - 2 * d
+    assert dim_w % 2 == 0
+
+    grid_t = torch.arange(t, dtype=torch.float32, device=device)
+    grid_h = torch.arange(h, dtype=torch.float32, device=device)
+    grid_w = torch.arange(w, dtype=torch.float32, device=device)
+    tt, hh, ww = torch.meshgrid(grid_t, grid_h, grid_w, indexing="ij")
+    emb_t = _torch_1d_sincos(dim_t, tt.flatten())
+    emb_h = _torch_1d_sincos(dim_h, hh.flatten())
+    emb_w = _torch_1d_sincos(dim_w, ww.flatten())
+    return torch.cat([emb_t, emb_h, emb_w], dim=1).to(dtype)
+
+
 class PositionEmbedding(nn.Module):
     def __init__(self, max_num_patch_per_side, hidden_size):
         super().__init__()
@@ -172,9 +217,18 @@ class PositionEmbedding(nn.Module):
         self._init_weights()
 
     def _init_weights(self):
-        # Initialize (and freeze) pos_embed by sin-cos embedding:
-        pos_embed = get_2d_sincos_pos_embed(self.hidden_size, self.max_num_patch_per_side)
-        self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float())
+        # Skip when constructed under accelerate.init_empty_weights() — the param is on
+        # meta and cannot be copied into. The caller must materialize the param on a real
+        # device and re-invoke _init_weights() after dispatch.
+        if self.pos_embed.is_meta:
+            return
+        with torch.no_grad():
+            self.pos_embed.data.copy_(
+                _torch_2d_sincos(
+                    self.hidden_size, self.max_num_patch_per_side,
+                    device=self.pos_embed.device, dtype=self.pos_embed.dtype,
+                )
+            )
 
     def forward(self, position_ids):
         return self.pos_embed[position_ids]
@@ -190,9 +244,16 @@ class PositionEmbedding3D(nn.Module):
         self._init_weights()
 
     def _init_weights(self):
-        # Initialize (and freeze) pos_embed by sin-cos embedding:
-        pos_embed = get_3d_sincos_pos_embed(self.hidden_size, self.max_num_latent_frames, self.max_latent_size, self.max_latent_size)
-        self.pos_embed.data.copy_(torch.from_numpy(pos_embed).float())
+        # See PositionEmbedding._init_weights for the meta-tensor rationale.
+        if self.pos_embed.is_meta:
+            return
+        with torch.no_grad():
+            self.pos_embed.data.copy_(
+                _torch_3d_sincos(
+                    self.hidden_size, self.max_num_latent_frames, self.max_latent_size, self.max_latent_size,
+                    device=self.pos_embed.device, dtype=self.pos_embed.dtype,
+                )
+            )
 
     def forward(self, position_ids):
         return self.pos_embed[position_ids]

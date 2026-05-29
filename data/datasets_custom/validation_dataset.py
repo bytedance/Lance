@@ -843,10 +843,6 @@ class ValidationDataset(Dataset):
             packed_timesteps[idx * h * w : (idx + 1) * h * w] = [-sys.float_info.max] * (h * w)
         if frame_condition_idx:
             mse_loss_indexes = sorted(list(set(mse_loss_indexes) - set(frame_condition_indexes)))
-
-        if not self.data_config.text_template:
-            self.sample["mse_loss_indexes"].extend(mse_loss_indexes)
-
         return packed_timesteps, mse_loss_indexes
 
     def tiv2v_sample(self, idx: int) -> Dict[str, Any]:

@@ -223,7 +223,7 @@ bash inference_lance.sh \
   --NUM_FRAMES 61 \
   --VIDEO_HEIGHT 480 \
   --VIDEO_WIDTH 848 \
-  --SAVE_PATH_GEN results/ti2v
+  --SAVE_PATH_GEN results/ff2v
 ```
 
 生成任务可选参数：

@@ -24,3 +24,4 @@ transformers-stream-generator==0.0.5
 gradio==5.31.0
 spaces==0.50.2
 sk-video
+openai==2.26.0

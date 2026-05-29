@@ -272,15 +272,8 @@ def validate_on_fixed_batch(
     with torch.no_grad(), torch.amp.autocast("cuda", enabled=True, dtype=torch.bfloat16):
         # Compute padded_latent.
         if "padded_videos" in val_data.keys():
-            if vae_model is not None:
-                vae_model.to(torch.device("cuda", device))
             val_data["padded_latent"] = make_padded_latent(val_data["padded_videos"], val_data["vae_data_mode"], vae_model)
-            if not save_source_video:
-                val_data.pop("padded_videos", None)
-            if offload_vae_during_denoise and vae_model is not None:
-                vae_model.to("cpu")
-                vae_was_offloaded = True
-            clean_memory()
+
         # -------------------- Generation branch --------------------
         if inference_args.task in GENERATION_TASKS:
             save_fps = int(val_data.get("save_fps", 12))
@@ -329,9 +322,6 @@ def validate_on_fixed_batch(
                 denoise_latent, captions, padded_videos, index = fsdp_model.validation_gen(**params)
 
             # Decode.
-            if vae_was_offloaded and vae_model is not None:
-                vae_model.to(torch.device("cuda", device))
-                clean_memory()
             for i_val, latent in enumerate(denoise_latent):
                 if inference_args.task in {TASK_FF2V, TASK_IMAGE_EDIT, TASK_VIDEO_EDIT}:
                     target_latents = [latent[-1]]
@@ -360,8 +350,6 @@ def validate_on_fixed_batch(
                 clean_memory()
 
             del denoise_latent, captions, padded_videos, params
-            if offload_vae_during_denoise and vae_model is not None:
-                vae_model.to("cpu")
             clean_memory()
 
         elif inference_args.task in UNDERSTANDING_TASKS:

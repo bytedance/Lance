@@ -40,8 +40,6 @@ def generate_system_prompt(system_prompt_type="caption", vision_type="video"):
             "Describe the key elements of the input maze image (layout, white path, black walls, blue star, red flag, and overall background), then generate a 2D animation. The blue star should slide smoothly along the white path, stop exactly on the red flag, and then acquire a trophy. Ensure the blue star never crosses or enters the black maze walls. Keep the camera as a static top-down view showing the entire maze."
         ]
 
-    print('str_list',str_list)
-
     return random.choice(str_list)
 
 

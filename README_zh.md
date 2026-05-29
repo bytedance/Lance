@@ -4,19 +4,19 @@
   <h1 align="center"><sup>Lance: Unified Multimodal Modeling by Multi-Task Synergy</sup></h1>
   <p>
     <strong>
-    <a href="https://scholar.google.com.hk/citations?user=FXxoQlsAAAAJ&hl=zh-CN&oi=ao" style="text-decoration: none; color: inherit;">Fengyi Fu</a><sup>*</sup>, 
-    <a href="https://corleone-huang.github.io/" style="text-decoration: none; color: inherit;">Mengqi Huang</a><sup>*,✉</sup>, 
-    <a href="https://scholar.google.com.hk/citations?user=9ER6nVkAAAAJ&hl=zh-CN&oi=ao" style="text-decoration: none; color: inherit;">Shaojin Wu</a><sup>*</sup>, 
-    Yunsheng Jiang<sup>*</sup>, 
-    Yufei Huo, 
+    <a href="https://scholar.google.com.hk/citations?user=FXxoQlsAAAAJ&hl=zh-CN&oi=ao" style="text-decoration: none; color: inherit;">Fengyi Fu</a><sup>*</sup>,
+    <a href="https://corleone-huang.github.io/" style="text-decoration: none; color: inherit;">Mengqi Huang</a><sup>*,✉</sup>,
+    <a href="https://scholar.google.com.hk/citations?user=9ER6nVkAAAAJ&hl=zh-CN&oi=ao" style="text-decoration: none; color: inherit;">Shaojin Wu</a><sup>*</sup>,
+    Yunsheng Jiang<sup>*</sup>,
+    Yufei Huo,
     <a href="https://guojianzhu.com/" style="text-decoration: none; color: inherit;">Jianzhu Guo</a><sup>✉,§</sup>
     </strong><br>
-    Hao Li, 
-    Yinghang Song, 
-    Fei Ding, 
-    Qian He, 
-    Zheren Fu, 
-    Zhendong Mao, 
+    Hao Li,
+    Yinghang Song,
+    Fei Ding,
+    Qian He,
+    Zheren Fu,
+    Zhendong Mao,
     Yongdong Zhang
     <br>
     <em>ByteDance</em>
@@ -37,6 +37,7 @@
 
 ## 🔥 更新
 
+- **`2026/05/29`**: 🔥 增加 image-to-video generation 代码支持：文本-图像到视频生成（首帧到视频）。[查看示例](assets/docs/changelog/2026-05-29.md)！
 - **`2026/05/26`**: 🎨 Gradio 界面现已支持图像和视频生成、编辑与理解任务。[欢迎体验](assets/docs/changelog/2026-05-26.md)！
 - **`2026/05/25`**: ✨ [Hugging Face Space](https://huggingface.co/spaces/bytedance-research/Lance) 已上线，感谢 HF 团队的支持！
 - **`2026/05/19`**: 🤗 技术报告现已发布于 [arXiv](http://arxiv.org/abs/2605.18678)。
@@ -58,7 +59,6 @@
 ## 📅 路线图
 
 - [ ] 发布 fine-tuning 代码。
-- [ ] 增加 image-to-video generation 代码支持。
 
 ## 🎨 演示
 
@@ -171,7 +171,7 @@ pip install flash-attn==2.8.3 --no-build-isolation
 from huggingface_hub import snapshot_download
 
 save_dir = "./downloads/"
-repo_id = "bytedance-research/Lance" 
+repo_id = "bytedance-research/Lance"
 cache_dir = save_dir + "/cache"
 
 snapshot_download(cache_dir=cache_dir,
@@ -194,7 +194,7 @@ bash inference_lance.sh
 ```
 
 - 运行前，请先在 `inference_lance.sh` 顶部配置推理参数。
-- **支持任务：** `t2i`、`t2v`、`image_edit`、`video_edit`、`x2t_image` 和 `x2t_video`。你也可以在 `inference_lance.py` 中修改 `TASK_DEFAULT_CONFIGS`，自定义每个任务默认使用的数据样例。
+- **支持任务：** `t2i`、`t2v`、`ti2v`、`ff2v`、`image_edit`、`video_edit`、`x2t_image` 和 `x2t_video`。你也可以在 `inference_lance.py` 中修改 `TASK_DEFAULT_CONFIGS`，自定义每个任务默认使用的数据样例。
 - **注意：** 对于所有任务，建议在编写输入 prompt 时参考提供示例中的 `prompt` 格式，这通常有助于获得更好的生成效果。
 
 
@@ -212,6 +212,23 @@ bash inference_lance.sh \
   --VIDEO_WIDTH 848 \
   --SAVE_PATH_GEN results/t2v
 ```
+
+##### 文本-图像到视频生成（首帧到视频）
+
+```bash
+bash inference_lance.sh \
+  --TASK_NAME ff2v \
+  --MODEL_PATH downloads/Lance_3B_Video \
+  --RESOLUTION video_480p \
+  --NUM_FRAMES 61 \
+  --VIDEO_HEIGHT 480 \
+  --VIDEO_WIDTH 848 \
+  --SAVE_PATH_GEN results/ti2v
+```
+
+生成任务可选参数：
+
+- `--ENHANCE_PROMPT true`：启用 T2V/FF2V prompt rewrite。prompt enhance rewrite 通常能提升生成效果。启用前请先在 `common/utils/caption_rewrite.py` 中配置 `API_KEY`、`MODEL_NAME` 和 `client`；如果没有配置有效 key，会自动跳过 prompt rewrite，此时建议尽量参考提供示例中的 prompt 风格手写输入。
 
 ##### 文生图
 
@@ -266,23 +283,9 @@ bash inference_lance.sh \
   --SAVE_PATH_GEN results/x2t_image
 ```
 
-#### 文本-图像到视频生成
-bash inference_lance.sh \
-  --TASK_NAME ti2v \
-  --MODEL_PATH downloads/Lance_3B_Video \
-  --RESOLUTION video_480p \
-  --SAVE_PATH_GEN results/ti2v_test/idip
+所有任务示例可选参数：
 
-
-#### 文本-图像到视频生成
-bash inference_lance.sh \
-  --TASK_NAME ff2v \
-  --MODEL_PATH downloads/Lance_3B_Video \
-  --RESOLUTION video_480p \
-  --SAVE_PATH_GEN results/ti2v_test/ff2v
-
-
-config/examples/ti2v_example.json  
+- `--CONFIG_PATH path/to/config.json`：使用自定义验证 JSON/JSONL 文件，而不是任务默认示例配置。
 
 <details>
 <summary><strong>展开任务和参数参考</strong></summary>
@@ -293,6 +296,7 @@ config/examples/ti2v_example.json
 |------------------------|--------------------------------------------------|----------------------------------------------|
 | `t2v` | 文生视频 | `config/examples/t2v_example.json` |
 | `t2i` | 文生图 | `config/examples/t2i_example.json` |
+| `ff2v` | 首帧到视频生成 | `config/examples/ti2v_example.json` |
 | `image_edit` | 图像编辑 | `config/examples/image_edit_example.json` |
 | `video_edit` | 视频编辑 | `config/examples/video_edit_example.json` |
 | `x2t_image` | 图像理解 | `config/examples/x2t_image_example.json` |
@@ -300,7 +304,7 @@ config/examples/ti2v_example.json
 
 关于理解任务的示例文件：
 
-- `config/examples/x2t_image_example.json`：用于图像理解示例，包括视觉问答和基于图像的推理。
+- `config/examples/x2t_image_example.json`：用于图像理解示例，包括视觉问答、基于图像的推理和图像描述。
 - `config/examples/x2t_video_example.json`：用于视频理解示例，包括视频问答和视频描述。
 
 #### 参数说明
@@ -318,6 +322,8 @@ config/examples/ti2v_example.json
 | `NUM_FRAMES` | `50` | 视频生成帧数（最大 121）。*图像任务不使用该参数。* |
 | `VIDEO_HEIGHT` / `VIDEO_WIDTH`| `768` | 空间分辨率。*编辑任务不使用该参数（由输入图像/视频决定）。* |
 | `RESOLUTION` | `"video_480p"` | 基础分辨率预设（如 `image_768res` 或 `video_480p`）。 |
+| `CONFIG_PATH` | `""` | 可选的自定义验证 JSON/JSONL 文件路径。为空时使用任务默认示例配置。 |
+| `ENHANCE_PROMPT` | `false` | 可选的 T2V/FF2V prompt rewrite 开关。T2V 使用纯文本 rewrite，FF2V 使用文本加输入图像 rewrite。prompt enhance rewrite 通常能提升生成效果。启用前请先在 `common/utils/caption_rewrite.py` 中配置 API key 和 client；如果没有 key，建议尽量参考提供示例中的 prompt 风格手写输入。 |
 
 </details>
 
@@ -327,6 +333,7 @@ config/examples/ti2v_example.json
 
 ```bash
 python lance_gradio.py --server-name 0.0.0.0 --server-port 7860
+```
 
 ### 基准评测
 

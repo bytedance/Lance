@@ -67,11 +67,11 @@ class ValidationDataset(Dataset):
         world_size: int = 1,
     ):
         """
-        初始化验证数据集
+        Initialize the validation dataset.
 
         Args:
-            jsonl_path: JSONL文件路径
-            tokenizer: 分词器
+            jsonl_path: Path to the JSONL file.
+            tokenizer: Tokenizer instance.
         """
         self.jsonl_path = jsonl_path
         self.tokenizer = tokenizer
@@ -204,12 +204,53 @@ class ValidationDataset(Dataset):
         return sequence_status
 
     def _read_jsonl(self) -> List[Dict[str, Any]]:
-        """读取JSONL文件"""
+        """Read the JSONL file."""
         data = []
         with open(self.jsonl_path, "r", encoding="utf-8") as f:
             for line in f:
                 data.append(json.loads(line.strip()))
         return data
+
+    def _maybe_enhance_t2v_prompt(self, prompt: str) -> str:
+        if self.data_config.task != "t2v":
+            return prompt
+        if not getattr(self.data_config, "enhance_prompt", False):
+            return prompt
+
+        from common.utils.caption_rewrite import has_rewrite_api_key, rewrite_prompt
+
+        if not has_rewrite_api_key():
+            return prompt
+
+        try:
+            enhanced_prompt = rewrite_prompt(prompt)
+        except Exception as exc:
+            print(f"[enhance_prompt][t2v][warning] prompt rewrite failed, use original prompt. error={exc}")
+            return prompt
+        print(f"[enhance_prompt][t2v][original] {prompt}")
+        print(f"[enhance_prompt][t2v][rewritten] {enhanced_prompt}")
+        return enhanced_prompt
+
+    def _maybe_enhance_ff2v_prompt(self, prompt: str, image_path: str) -> str:
+        if "ff2v" not in self.data_config.task:
+            return prompt
+        if not getattr(self.data_config, "enhance_prompt", False):
+            return prompt
+
+        from common.utils.caption_rewrite import has_rewrite_api_key, rewrite_ff2v_prompt
+
+        if not has_rewrite_api_key():
+            return prompt
+
+        try:
+            enhanced_prompt = rewrite_ff2v_prompt(prompt, image_path=image_path)
+        except Exception as exc:
+            print(f"[enhance_prompt][ff2v][warning] prompt rewrite failed, use original prompt. error={exc}")
+            return prompt
+        print(f"[enhance_prompt][ff2v][image] {image_path}")
+        print(f"[enhance_prompt][ff2v][original] {prompt}")
+        print(f"[enhance_prompt][ff2v][rewritten] {enhanced_prompt}")
+        return enhanced_prompt
 
     def __len__(self) -> int:
         return len(self.data)
@@ -316,7 +357,7 @@ class ValidationDataset(Dataset):
         return self.sample, curr, curr_rope_id, curr_split_len, curr_video_grid_thw, num_video_tokens
 
     def process_text(self, caption: str, curr: int, curr_rope_id: int, curr_split_len: int, item_loss=0):
-        """处理文本，添加特殊token"""
+        """Process text and append special tokens."""
         text_ids = self.tokenizer.encode(caption)
         shifted_text_ids = [self.bos_token_id] + text_ids
         self.sample["packed_text_ids"].extend(shifted_text_ids)
@@ -330,7 +371,7 @@ class ValidationDataset(Dataset):
         curr += len(shifted_text_ids)
         curr_split_len += len(shifted_text_ids)
 
-        # add a <|im_end|> token
+        # Append the <|im_end|> end token.
         self.sample["packed_text_ids"].append(self.eos_token_id)
         self.sample["packed_text_indexes"].append(curr)
         curr += 1
@@ -409,14 +450,14 @@ class ValidationDataset(Dataset):
 
                 self.sample["packed_text_ids"].extend([self.image_token_id] * num_vid_tokens)
 
-                # add <|endofimage|> token
+                # Append the <|endofimage|> image end token.
                 self.sample["packed_text_ids"].append(self.end_of_image)
                 self.sample["packed_text_indexes"].append(curr)
                 curr += 1
                 curr_split_len += 1
                 num_special_tokens += 1
 
-                # update sequence status
+                # Update sequence state.
                 if item_loss == 1:
                     self.sample["attn_modes"].append("noise")
                 else:
@@ -532,7 +573,7 @@ class ValidationDataset(Dataset):
         curr += len(text_ids_prompt_prefix)
         split_len_prefix = len(text_ids_prompt_prefix)
 
-        # update sequence status
+        # Update sequence state.
         self.sample["attn_modes"].append("causal")
         self.sample["packed_position_ids"].extend(range(curr_rope_id, curr_rope_id + split_len_prefix))
         self.sample["split_lens"].append(split_len_prefix)
@@ -546,7 +587,7 @@ class ValidationDataset(Dataset):
         if isinstance(vit_video_tensor, torch.Tensor):
             self.sample["vit_video_tensors"].append(vit_video_tensor)
 
-            # preprocess video
+            # Preprocess the video.
             vit_tokens = patchify_video_with_merge(
                 vit_video_tensor, self.data_config.vit_patch_size, self.data_config.vit_patch_size_temporal
             )
@@ -574,16 +615,16 @@ class ValidationDataset(Dataset):
         curr += num_video_tokens
         split_len_vision_token += num_video_tokens
 
-        # dummy position_ids
+        # Fill placeholder position_ids.
         self.sample["packed_text_ids"].extend([self.image_token_id] * num_video_tokens)
 
-        # add a <|endofimage|> token
+        # Append the <|endofimage|> image end token.
         self.sample["packed_text_ids"].append(self.end_of_image)
         self.sample["packed_text_indexes"].append(curr)
         curr += 1
         split_len_vision_token += 1
 
-        # update sequence status
+        # Update sequence state.
         self.sample["attn_modes"].append("full")
         self.sample["packed_position_ids"].extend([curr_rope_id] * split_len_vision_token)
         self.sample["split_lens"].append(split_len_vision_token)
@@ -690,16 +731,11 @@ class ValidationDataset(Dataset):
         )
 
     def t2v_sample(self, idx: int) -> Dict[str, Any]:
-        """获取单个样本"""
-        _T, _H, _W = self.data_config.vae_downsample
-        if self.data_config.task == "t2i":
-            t = 1
-            t_ = 1
-            element_dtype = 'image'
-        else:
-            t = (self.data_config.num_frames - 1) // _T + 1
-            t_ = self.data_config.num_frames
-            element_dtype = 'video'
+        """Get a single sample."""
+        thw_video, thw_downsample = self.get_thw()
+        t, h, w = thw_downsample
+        num_vid_tokens = t * h * w
+        spatial_merge_size = 2
 
         self.sample = self.set_sequence_status()
         packed_text_indexes, packed_position_ids, sample_modality = [], [], []
@@ -708,9 +744,10 @@ class ValidationDataset(Dataset):
             user_prompt = "".join(sample["prompt_en"][0])
         else:
             user_prompt = sample["data"]
+        user_prompt = self._maybe_enhance_t2v_prompt(user_prompt)
 
         if self.data_config.text_template:
-            caption_instruction = generate_system_prompt(system_prompt_type=self.data_config.task, vision_type=element_dtype)
+            caption_instruction = generate_system_prompt(system_prompt_type=self.data_config.task, vision_type=self.data_config.target_modality)
 
             text_template_user, text_template_assistant, vit_num_tokens, video_types = [], [], [], []
             if self.system_prompt_type == 'SP2':
@@ -728,13 +765,8 @@ class ValidationDataset(Dataset):
             packed_position_ids.extend(range(0, text_split_len))
             sample_modality.extend([modality_map['text']] * text_split_len)
 
-        h = self.data_config.H // _H
-        w = self.data_config.W // _W
-        spatial_merge_size = 2
-        num_vid_tokens = t * h * w
-
         if self.data_config.text_template:
-            text_template_assistant.append({"type":element_dtype})
+            text_template_assistant.append({"type":self.data_config.target_modality})
         else:
             text_ids.append(self.new_token_ids["start_of_image"])
             packed_text_indexes.append(text_split_len)
@@ -774,7 +806,7 @@ class ValidationDataset(Dataset):
             "val_sample_type": ["gen"],
             "padded_latent": None,
             "mse_loss_indexes": packed_vae_token_indexes if not self.data_config.text_template else torch.tensor(self.sample["mse_loss_indexes"]),
-            "video_sizes": torch.tensor([[t_, self.data_config.H, self.data_config.W]]),
+            "video_sizes": torch.tensor([thw_video]),
             "packed_position_ids": torch.tensor(packed_position_ids) if not self.data_config.text_template else torch.tensor(self.sample["packed_position_ids"]),
             "caption": user_prompt,
             "sample_type": ["gen"],
@@ -786,63 +818,27 @@ class ValidationDataset(Dataset):
             "additional_info": sample["additional_info"] if "additional_info" in sample.keys() else None,
         }
 
-    def tv2v_sample(self, idx: int) -> Dict[str, Any]:
-        sample = self.data[idx]
-        user_prompt = "Create a 2D animation based on the provided image of a maze. The blue star slides smoothly along the white path, stopping perfectly on the red flag and then acquiring a trophy. The blue star never slides or crosses into the black segments of the maze. The camera is a static, top-down view showing the entire maze."
-
-        sample["data"] = {
-            "interleave_array": [user_prompt, sample["image_path"], sample["image_path"], sample["video_path"]],
-            "element_dtype_array": ["text", "image", "image", "video"],
-            "istarget_in_interleave": [0, 0, 0, 1]
-        }
-
-        self.sample_task = 'edit'
-        result = self.tiv2v_sample(idx)
-        result["caption"] = user_prompt
-        result["caption_cn"] = user_prompt
-        return result
-
     def get_thw(self):
         _T, _H, _W = self.data_config.vae_downsample
         if self.data_config.target_modality == "image":
             t = 1
             t_ = 1
         elif self.data_config.target_modality == "video":
-            t = (self.data_config.num_frames - 1) // _T + 1  # k*N+1 一般t维度不做patchify!! 如果t维度要做patchify，写法需要更新
+            t = (self.data_config.num_frames - 1) // _T + 1
             t_ = self.data_config.num_frames
 
         h = self.data_config.H // _H
         w = self.data_config.W // _W
-        return [t_, self.data_config.H, self.data_config.W], [t, h, w] # video_size 和 下采样thw
+        return [t_, self.data_config.H, self.data_config.W], [t, h, w]  # Original video size and downsampled size.
 
-
-    # def get_thw(self):
-    #     print('self.data_config.task', self.data_config.task)
-    #     _T, _H, _W = self.data_config.vae_downsample
-    #     if '2i' in self.data_config.task or 'image' in self.data_config.task:
-    #         t = 1
-    #         t_ = 1
-    #     elif '2v' in self.data_config.task or 'video' in self.data_config.task:
-    #         t = (self.data_config.num_frames - 1) // _T + 1  # k*N+1 一般t维度不做patchify!! 如果t维度要做patchify，写法需要更新
-    #         t_ = self.data_config.num_frames
-
-    #     h = self.data_config.H // _H
-    #     w = self.data_config.W // _W
-    #     return [t_, self.data_config.H, self.data_config.W], [t, h, w] # video_size 和 下采样thw
 
     def gen_timesteps(self, t, h, w, curr, num_vid_tokens):
-        timestep = np.random.randn()  # NOTE: 外面会sigmoid一下
-
+        timestep = np.random.randn()
         frame_condition_idx = self.frame_condition_idx
         packed_timesteps = [timestep] * num_vid_tokens
-
         mse_loss_indexes = list(range(curr, curr + num_vid_tokens))
         frame_condition_indexes = []
         for idx in frame_condition_idx:
-            if idx == -1:
-                idx = t - 1
-                if idx == 1:
-                    continue  # 如果帧数仅两帧跳过，避免所有帧均为条件帧相同
             frame_condition_indexes.extend(mse_loss_indexes[idx * h * w : (idx + 1) * h * w])
             packed_timesteps[idx * h * w : (idx + 1) * h * w] = [-sys.float_info.max] * (h * w)
         if frame_condition_idx:
@@ -852,7 +848,6 @@ class ValidationDataset(Dataset):
             self.sample["mse_loss_indexes"].extend(mse_loss_indexes)
 
         return packed_timesteps, mse_loss_indexes
-
 
     def tiv2v_sample(self, idx: int) -> Dict[str, Any]:
         sample_modality, text_template_user, text_template_assistant, vit_num_tokens, video_types = [], [], [], [], []
@@ -891,27 +886,19 @@ class ValidationDataset(Dataset):
                         sample_lens += curr_split_len
                         sample_modality.extend([modality_map['ref_vit']] * curr_split_len)
 
-                    # vae condition processing
+                    # Process VAE conditioning input.
                     vae_image_tensor = self.get_video_tensor_online(element, vision_stream="vae_video", element_dtype=element_dtype)
                     self.sample, curr, curr_rope_id, curr_split_len, curr_video_grid_thw, video_sizes, num_tokens_ = self.process_vae_video(
                         vae_image_tensor, curr=curr, curr_rope_id=curr_rope_id, curr_split_len=0, curr_video_grid_thw=curr_video_grid_thw, video_sizes=video_sizes, item_loss=is_target
                     )
-                    if self.data_config.text_template:
-                        vit_num_tokens.append(num_tokens_)
-                        if is_target == 0:
-                            text_template_user.append({"type": element_dtype})
-                            video_types.append("cond_vae_video")
-                        # else:
-                        #     text_template_assistant.append({"type": element_dtype})
-                        #     video_types.append("target_vae_video")
-                    else:
-                        sample_lens += curr_split_len
-                        if is_target == 0:
-                            sample_modality.extend([modality_map[f'ref_{element_dtype}']] * curr_split_len)
-                        # else:
-                        #     sample_modality.extend([modality_map[f'noise']] * curr_split_len)
+                    vit_num_tokens.append(num_tokens_)
+                    text_template_user.append({"type": element_dtype})
+                    video_types.append("cond_vae_video")
 
-        # VAE target processing
+                    if self.sample_task == 'edit':
+                        self.data_config.num_frames, self.data_config.H, self.data_config.W = vae_image_tensor.shape[1], vae_image_tensor.shape[2], vae_image_tensor.shape[3]
+
+        # Process the VAE target input.
         thw_video, thw_downsample = self.get_thw()
         video_sizes.append(thw_video)
         t, h, w = thw_downsample
@@ -926,19 +913,18 @@ class ValidationDataset(Dataset):
         curr_video_grid_thw.append(vae_video_grid_thw)
         self.sample["vae_video_grid_thw"].append(vae_video_grid_thw)
         self.sample["vae_latent_shapes"].append((t, h, w))
-        # 使用3D感知的位置编码函数：外插
+        # Use 3D-aware extrapolated position encoding.
         packed_latent_position_ids = get_flattened_position_ids_extrapolate_video(t, h, w, max_latent_size=self.data_config.max_latent_size)
         self.sample["packed_latent_position_ids"].append(packed_latent_position_ids)
         packed_timesteps, mse_loss_indexes = self.gen_timesteps(t, h, w, curr, num_vid_tokens)
         self.sample["packed_timesteps"].extend(packed_timesteps)
-        vae_tensor = torch.randn([3, thw_video[0], thw_video[1], thw_video[2]], dtype=torch.float32) #  # CTHW 原始的视频，非latent
+        vae_tensor = torch.randn([3, thw_video[0], thw_video[1], thw_video[2]], dtype=torch.float32) # Raw CTHW video, not latent.
         self.sample["vae_video_tensors"].append(vae_tensor)
         if self.data_config.text_template:
             vit_num_tokens.append(num_vid_tokens)
             text_template_assistant.append({"type": self.data_config.target_modality})
             video_types.append("target_vae_video")
 
-        if self.data_config.text_template:
             if text_template_user[0]['type']=='text':
                 text_template_user = text_template_user[1:] + text_template_user[:1]
             caption_instruction = generate_system_prompt(system_prompt_type=self.data_config.task, vision_type=element_dtype)
@@ -956,7 +942,6 @@ class ValidationDataset(Dataset):
                 )
             sample_lens = len(all_token_id)
             sample_modality = self.sample["sample_modality"]
-
 
         additional_fields = {
             "caption": caption_all,
@@ -978,23 +963,38 @@ class ValidationDataset(Dataset):
             video_sizes=video_sizes
         )
 
-    def ff2v_sample_wo_target(self, idx: int) -> Dict[str, Any]: # 构造一个统一的interleave数据处理函数
-        """获取单个样本"""
+    def ff2v_sample(self, idx: int) -> Dict[str, Any]:
+        """Get a single sample."""
         sample_modality, text_template_user, text_template_assistant, vit_num_tokens, video_types, search_text = [], [], [], [], [], ''
         self.sample = self.set_sequence_status()
         sample_lens = 0
         sample = self.data[idx]
 
         index = sample["index"]
-        data_sample = sample["data"] # {'interleave_array': [...], 'element_dtype_array': [...], 'istarget_in_interleave': [...]}}
-        additional_info = [] #sample["data"]["additional_info"]
+        data_sample = sample["data"]
+        additional_info = sample["data"]["additional_info"] if "additional_info" in sample["data"] else []
 
         interleave_array, element_dtype_array, istarget_in_interleave = data_sample["interleave_array"], data_sample["element_dtype_array"], data_sample["istarget_in_interleave"]
+        interleave_array = list(interleave_array)
+
+        text_idx = next((i for i, dtype in enumerate(element_dtype_array) if dtype == "text"), None)
+        image_idx = next(
+            (
+                i
+                for i, (dtype, is_target) in enumerate(zip(element_dtype_array, istarget_in_interleave))
+                if dtype == "image" and is_target == 0
+            ),
+            None,
+        )
+        if text_idx is not None and image_idx is not None:
+            interleave_array[text_idx] = self._maybe_enhance_ff2v_prompt(
+                interleave_array[text_idx],
+                image_path=interleave_array[image_idx],
+            )
 
         curr, curr_rope_id, curr_split_len, curr_video_grid_thw, video_sizes, caption_all, vae_image_tensor = 0, 0, 0, [], [], '', None
         for element, element_dtype, is_target in zip(interleave_array, element_dtype_array, istarget_in_interleave):
             if element_dtype == "text":
-                # 文本 序列处理
                 caption_all += element
                 if self.data_config.text_template:
                     text_template_user.append({"type": "text", "text": element})
@@ -1003,20 +1003,13 @@ class ValidationDataset(Dataset):
                     self.sample, curr, curr_rope_id, curr_split_len = self.process_text(element, curr=curr, curr_rope_id=curr_rope_id, curr_split_len=0, item_loss=is_target)
                     sample_lens += curr_split_len
                     sample_modality.extend([modality_map['text']] * curr_split_len)
-            elif element_dtype in ["image", "video"]: # 这部分忽略 target vae latent 处理 （如果有）
-                if is_target == 0: # first frame 处理
-                    vae_image_tensor = self.get_video_tensor_online(element, vision_stream="vae_video", element_dtype=element_dtype)  # [C=3, T=1, H, W]
-                    # print('vae_image_tensor',vae_image_tensor.shape)
-
+            elif element_dtype in ["image", "video"]:
+                if is_target == 0:
+                    vae_image_tensor = self.get_video_tensor_online(element, vision_stream="vae_video", element_dtype=element_dtype)
                     self.data_config.H, self.data_config.W = vae_image_tensor.shape[2], vae_image_tensor.shape[3]
                     self.frame_condition_idx = [0]
-                elif is_target == 1 and 'maze' in self.data_config.task: # target frame 处理
-                    vae_image_tensor_target = self.get_video_tensor_online(element, vision_stream="vae_video", element_dtype=element_dtype)
-                    self.data_config.num_frames = 37 # vae_image_tensor_target.shape[1]
-                    print('num_frames',self.data_config.num_frames)
 
-
-        # 额外添加 target vae latent
+        # Add the target VAE latent.
         thw_video, thw_downsample = self.get_thw()
         video_sizes.append(thw_video)
         t, h, w = thw_downsample
@@ -1031,15 +1024,13 @@ class ValidationDataset(Dataset):
         curr_video_grid_thw.append(vae_video_grid_thw)
         self.sample["vae_video_grid_thw"].append(vae_video_grid_thw)
         self.sample["vae_latent_shapes"].append((t, h, w))
-        # 使用3D感知的位置编码函数：外插
         packed_latent_position_ids = get_flattened_position_ids_extrapolate_video(t, h, w, max_latent_size=self.data_config.max_latent_size)
         self.sample["packed_latent_position_ids"].append(packed_latent_position_ids)
         packed_timesteps, mse_loss_indexes = self.gen_timesteps(t, h, w, curr, num_vid_tokens)
         self.sample["packed_timesteps"].extend(packed_timesteps)
-        vae_tensor = torch.randn([3, thw_video[0], thw_video[1], thw_video[2]], dtype=torch.float32) #  # CTHW 原始的视频，非latent
-        if vae_image_tensor is not None:
-            print('vae_image_tensor',vae_image_tensor.shape,vae_tensor.shape)
-            vae_tensor[:, :4, :, :] = vae_image_tensor[:, 0:1, :, :].repeat(1,4,1,1)
+        vae_tensor = torch.randn([3, thw_video[0], thw_video[1], thw_video[2]], dtype=torch.float32)
+        if vae_image_tensor is not None:  # Fill in the first frame.
+            vae_tensor[:, :4, :, :] = vae_image_tensor[:, 0:1, :, :].repeat(1, 4, 1, 1)
         else:
             raise ValueError("vae_image_tensor of first frame is None")
         self.sample["vae_video_tensors"].append(vae_tensor)
@@ -1047,28 +1038,11 @@ class ValidationDataset(Dataset):
             vit_num_tokens.append(num_vid_tokens)
             text_template_assistant.append({"type": self.data_config.target_modality})
             video_types.append("target_vae_video")
-        else:
-            self.sample["packed_text_ids"].append(self.start_of_image)
-            self.sample["packed_text_indexes"].append(curr)
-            curr += 1
-            self.sample["packed_vae_token_indexes"].extend(range(curr, curr + num_vid_tokens))
-            curr += num_vid_tokens
-            self.sample["packed_text_ids"].extend([self.image_token_id] * num_vid_tokens)
-            self.sample["packed_text_ids"].append(self.end_of_image)
-            self.sample["packed_text_indexes"].append(curr)
-            curr += 1
-            self.sample["attn_modes"].append("noise")
-            self.sample["packed_position_ids"].extend([curr_rope_id] * (num_vid_tokens + 2))
-            self.sample["split_lens"].append(num_vid_tokens + 2)
 
-
-        if self.data_config.text_template:
-            if len(text_template_user) > 0 and text_template_user[0]['type']=='text': # 先图像/视频后文本的处理：
-                text_template_user = text_template_user[1:] + text_template_user[:1] # HACK
+            if len(text_template_user) > 0 and text_template_user[0]['type'] == 'text':
+                text_template_user = text_template_user[1:] + text_template_user[:1]
             caption_instruction = generate_system_prompt(system_prompt_type=self.data_config.task, vision_type=element_dtype)
-            # print('caption_instruction, text_template_assistant, text_template_user',caption_instruction, text_template_assistant, text_template_user)
             all_token_id, spans_index, tgt_index, search_index = self.render_template(caption_instruction, text_template_assistant, text_template_user, vit_num_tokens, search_text=search_text)
-            # 计算
             self.sample, curr, curr_rope_id, curr_split_len = self.process_text_template(
                 all_token_id,
                 spans_index,
@@ -1083,35 +1057,31 @@ class ValidationDataset(Dataset):
             sample_lens = len(all_token_id)
             sample_modality = self.sample["sample_modality"]
 
-
-
-        self.sample["sample_task"] =  torch.ones(sample_lens)*sample_task_map[self.sample_task]
-
-        self.sample["sample_lens"] = [sample_lens]
-        self.sample["video_grid_thw"] = torch.tensor([curr_video_grid_thw])
-        self.sample["packed_text_ids"] = torch.tensor(self.sample["packed_text_ids"])
-        self.sample["packed_text_indexes"] = torch.tensor(self.sample["packed_text_indexes"])
-        self.sample["packed_vae_token_indexes"] = torch.tensor(self.sample["packed_vae_token_indexes"])
-        self.sample["packed_position_ids"] = torch.tensor(self.sample["packed_position_ids"])
-        self.sample["vae_video_grid_thw"] = torch.tensor(self.sample["vae_video_grid_thw"])
-        self.sample["vit_video_grid_thw"] = torch.tensor(self.sample["vit_video_grid_thw"]) if self.sample["vit_video_grid_thw"] != [] else None
-        self.sample["packed_vit_token_indexes"] = torch.tensor(self.sample["packed_vit_token_indexes"]) if self.sample["packed_vit_token_indexes"] != [] else None
-        self.sample["sample_N_target"] = torch.tensor([[1]])
-        self.sample["sample_type"] = ["gen"]
-        self.sample["padded_videos"] = self.sample["vae_video_tensors"]
+        self.sample["sample_task"] = torch.ones(sample_lens) * sample_task_map[self.sample_task]
+        self.sample["sample_modality"] = sample_modality
+        has_vit_video_grid = self.sample["vit_video_grid_thw"] != []
+        has_packed_vit_token_indexes = self.sample["packed_vit_token_indexes"] != []
         if self.frame_condition_idx != []:
             mse_loss_indexes_first = self.sample["mse_loss_indexes"][0]
-            self.sample["mse_loss_indexes"] = torch.tensor(mse_loss_indexes)
-            self.sample["mse_loss_indexes"] += mse_loss_indexes_first
-        else:
-            self.sample["mse_loss_indexes"] = torch.tensor(self.sample["mse_loss_indexes"])
-        self.sample["video_sizes"] = torch.tensor(video_sizes)
-        self.sample["caption"] = caption_all
-        self.sample["caption_cn"] = caption_all
-        self.sample["index"] = sample["index"]
-        self.sample["sample_modality"] = torch.tensor(sample_modality)
-        self.sample["additional_info"] = additional_info
-        return self.sample
+            self.sample["mse_loss_indexes"] = [idx + mse_loss_indexes_first for idx in mse_loss_indexes]
+
+        finalized_sample = self._finalize_sample(
+            sample_lens,
+            curr_video_grid_thw,
+            sample_type="gen",
+            sample=sample,
+            additional_fields={
+                "caption": caption_all,
+                "caption_cn": caption_all,
+                "additional_info": additional_info,
+            },
+            video_sizes=video_sizes,
+        )
+        if not has_vit_video_grid:
+            finalized_sample["vit_video_grid_thw"] = None
+        if not has_packed_vit_token_indexes:
+            finalized_sample["packed_vit_token_indexes"] = None
+        return finalized_sample
 
     def render_template(self, instruction, text_template_assistant, text_template_user, vit_num_tokens, search_text=""):
         messages = [
@@ -1238,44 +1208,28 @@ class ValidationDataset(Dataset):
         )
 
     def __getitem__(self, idx: int) -> Dict[str, Any]:
-        if '_t' in self.data_config.task:
+        task = self.data_config.task
+        # Get target modality
+        if '_t' in task:
             self.data_config.target_modality = 'text'
-        elif '2i' in self.data_config.task or 'image' in self.data_config.task:
+        elif '2i' in task or 'image' in task:
             self.data_config.target_modality = 'image'
         else:
             self.data_config.target_modality = 'video'
 
-        if self.data_config.task == "tv2v":
-            return self.tv2v_sample(idx)
-        elif self.data_config.task in ["t2i","t2v"]:
+        # Get sample
+        if task in ["t2i", "t2v"]:  # Text-to-image or text-to-video
             return self.t2v_sample(idx)
-        elif self.data_config.task == "ti2t":
-            return self.ti2t_sample(idx)
-        elif "tiv2v" in self.data_config.task:
-            if 'edit' in self.data_config.task:
-                self.sample_task = 'edit'
-            elif 'idip' in self.data_config.task:
-                self.sample_task = 'idip'
-            return self.tiv2v_sample(idx)
-        elif self.data_config.task == "video_edit":
+        elif 'edit' in task:  # Video Editing or Image Editing
             self.sample_task = 'edit'
             return self.tiv2v_sample(idx)
-        elif self.data_config.task == "video_idip" or self.data_config.task == "video_idip_multiref":
+        elif 'idip' in task or task == "ti2v":  # Video IDIP, Image IDIP or TI2V
             self.sample_task = 'idip'
             return self.tiv2v_sample(idx)
-        elif self.data_config.task == "image_edit":
-            self.sample_task = 'edit'
-            return self.tiv2v_sample(idx)
-        elif self.data_config.task == "image_idip":
-            self.sample_task = 'idip'
-            return self.tiv2v_sample(idx)
-        elif self.data_config.task in ["ti2v"]:
-            self.sample_task = 'idip'
-            return self.tiv2v_sample(idx)
-        elif  "ff2v" in self.data_config.task:
+        elif "ff2v" in task:  # Text-Image-to-Video (First Frame to Video)
             self.sample_task = 't2v'
-            return self.ff2v_sample_wo_target(idx)
-        elif self.data_config.task in ["x2t", "x2t_image", "x2t_video"]:
+            return self.ff2v_sample(idx)
+        elif task in ["x2t", "x2t_image", "x2t_video"]:  # Multi-modal Understanding
             return self.x2t_sample(idx)
         else:
-            raise ValueError(f"Unknown task: {self.data_config.task}")
+            raise ValueError(f"Unknown task: {task}")

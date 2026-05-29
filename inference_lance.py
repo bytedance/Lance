@@ -646,6 +646,12 @@ def main():
     dataset_config.task = inference_args.task
     dataset_config.resolution = inference_args.resolution
     dataset_config.text_template = inference_args.text_template
+    dataset_config.enhance_prompt = inference_args.enhance_prompt
+    if inference_args.enhance_prompt:
+        if inference_args.task not in {TASK_T2V, TASK_FF2V}:
+            log_rank0("[startup] enhance_prompt is enabled but only applies to t2v and ff2v; skipping prompt rewrite for this task.")
+        else:
+            log_rank0(f"[startup] enhance_prompt is enabled for {inference_args.task} prompts. Configure API_KEY in common/utils/caption_rewrite.py.")
     val_dataset = ValidationDataset(
         jsonl_path= data_args.val_dataset_config_file,
         tokenizer=tokenizer,

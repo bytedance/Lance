@@ -4,19 +4,19 @@
   <h1 align="center"><sup>Lance: Unified Multimodal Modeling by Multi-Task Synergy</sup></h1>
   <p>
     <strong>
-    <a href="https://scholar.google.com.hk/citations?user=FXxoQlsAAAAJ&hl=zh-CN&oi=ao" style="text-decoration: none; color: inherit;">Fengyi Fu</a><sup>*</sup>, 
-    <a href="https://corleone-huang.github.io/" style="text-decoration: none; color: inherit;">Mengqi Huang</a><sup>*,✉</sup>, 
-    <a href="https://scholar.google.com.hk/citations?user=9ER6nVkAAAAJ&hl=zh-CN&oi=ao" style="text-decoration: none; color: inherit;">Shaojin Wu</a><sup>*</sup>, 
-    Yunsheng Jiang<sup>*</sup>, 
-    Yufei Huo, 
+    <a href="https://scholar.google.com.hk/citations?user=FXxoQlsAAAAJ&hl=zh-CN&oi=ao" style="text-decoration: none; color: inherit;">Fengyi Fu</a><sup>*</sup>,
+    <a href="https://corleone-huang.github.io/" style="text-decoration: none; color: inherit;">Mengqi Huang</a><sup>*,✉</sup>,
+    <a href="https://scholar.google.com.hk/citations?user=9ER6nVkAAAAJ&hl=zh-CN&oi=ao" style="text-decoration: none; color: inherit;">Shaojin Wu</a><sup>*</sup>,
+    Yunsheng Jiang<sup>*</sup>,
+    Yufei Huo,
     <a href="https://guojianzhu.com/" style="text-decoration: none; color: inherit;">Jianzhu Guo</a><sup>✉,§</sup>
     </strong><br>
-    Hao Li, 
-    Yinghang Song, 
-    Fei Ding, 
-    Qian He, 
-    Zheren Fu, 
-    Zhendong Mao, 
+    Hao Li,
+    Yinghang Song,
+    Fei Ding,
+    Qian He,
+    Zheren Fu,
+    Zhendong Mao,
     Yongdong Zhang
     <br>
     <em>ByteDance</em>
@@ -37,6 +37,7 @@
 
 ## 🔥 Updates
 
+- **`2026/05/29`**: 💪 Added code support for Text-Image-to-Video (First-Frame-to-Video). [More to see](assets/docs/changelog/2026-05-29.md)!
 - **`2026/05/26`**: 🎨 The Gradio interface now supports image and video generation, editing, and understanding. [Try it out](assets/docs/changelog/2026-05-26.md)!
 - **`2026/05/25`**: ✨ The [Hugging Face Space](https://huggingface.co/spaces/bytedance-research/Lance) is now live, thanks to the HF team!
 - **`2026/05/19`**: 🤗 The technical report is now available on [arXiv](http://arxiv.org/abs/2605.18678).
@@ -58,7 +59,6 @@ We are actively updating and improving this repository. If you find any bugs or 
 ## 📅 Roadmap
 
 - [ ] Release the fine-tuning code.
-- [ ] Add support for image-to-video generation code.
 
 ## 🎨 Demo
 
@@ -171,7 +171,7 @@ Then, download the model weights from [Lance-3B on Hugging Face](https://hugging
 from huggingface_hub import snapshot_download
 
 save_dir = "./downloads/"
-repo_id = "bytedance-research/Lance" 
+repo_id = "bytedance-research/Lance"
 cache_dir = save_dir + "/cache"
 
 snapshot_download(cache_dir=cache_dir,
@@ -195,7 +195,7 @@ bash inference_lance.sh
 ```
 
 - Before running, please configure the inference parameters at the top of `inference_lance.sh`.
-- **Supported tasks:** `t2i`, `t2v`, `image_edit`, `video_edit`, `x2t_image`, and `x2t_video`. You can modify `TASK_DEFAULT_CONFIGS` in `inference_lance.py` to customize the default data samples for each task.
+- **Supported tasks:** `t2i`, `t2v`, `ti2v`, `ff2v`, `image_edit`, `video_edit`, `x2t_image`, and `x2t_video`. You can modify `TASK_DEFAULT_CONFIGS` in `inference_lance.py` to customize the default data samples for each task.
 - **Note:** For all tasks, we recommend following the `prompt` format used in the provided examples when writing input prompts, as this typically leads to better generation quality.
 
 #### Task Examples
@@ -212,6 +212,23 @@ bash inference_lance.sh \
   --VIDEO_WIDTH 848 \
   --SAVE_PATH_GEN results/t2v
 ```
+
+##### Text-Image-to-Video (First-Frame-to-Video)
+
+```bash
+bash inference_lance.sh \
+  --TASK_NAME ff2v \
+  --MODEL_PATH downloads/Lance_3B_Video \
+  --RESOLUTION video_480p \
+  --NUM_FRAMES 61 \
+  --VIDEO_HEIGHT 480 \
+  --VIDEO_WIDTH 848 \
+  --SAVE_PATH_GEN results/ff2v
+```
+
+Optional parameters for video generation task examples:
+
+- `--ENHANCE_PROMPT true`: enable prompt rewrite for T2V/FF2V. Prompt enhancement generally improves generation quality. Before enabling it, set `API_KEY`, `MODEL_NAME`, and `client` in `common/utils/caption_rewrite.py`. If no API key is configured there, prompt rewrite is skipped; in that case, we recommend **writing prompts in the style of the provided examples**.
 
 ##### Text-to-Image
 
@@ -266,14 +283,9 @@ bash inference_lance.sh \
   --SAVE_PATH_GEN results/x2t_image
 ```
 
-bash inference_lance.sh \
-  --TASK_NAME ti2v \
-  --MODEL_PATH downloads/Lance_3B_Video \
-  --RESOLUTION video_480p \
-  --NUM_FRAMES 50 \
-  --VIDEO_HEIGHT 480 \
-  --VIDEO_WIDTH 848 \
-  --SAVE_PATH_GEN results/ti2v_test/idip2
+Optional parameters for all task examples:
+
+- `--CONFIG_PATH path/to/config.json`: use a custom validation JSON/JSONL file instead of the task default example config.
 
 
 <details>
@@ -285,6 +297,7 @@ bash inference_lance.sh \
 |------------------------|--------------------------------------------------|----------------------------------------------|
 | `t2v`                  | Text-to-Video generation                         | `config/examples/t2v_example.json`           |
 | `t2i`                  | Text-to-Image generation                         | `config/examples/t2i_example.json`           |
+| `ff2v`                 | First-Frame-to-Video generation                  | `config/examples/ti2v_example.json`          |
 | `image_edit`           | Image editing                                    | `config/examples/image_edit_example.json`    |
 | `video_edit`           | Video editing                                    | `config/examples/video_edit_example.json`    |
 | `x2t_image`            | Image understanding            | `config/examples/x2t_image_example.json`    |
@@ -292,7 +305,7 @@ bash inference_lance.sh \
 
 For understanding examples:
 
-- `config/examples/x2t_image_example.json`: image understanding examples for visual question answering and image-based reasoning.
+- `config/examples/x2t_image_example.json`: image understanding examples for visual question answering, reasoning and image captioning.
 - `config/examples/x2t_video_example.json`: video understanding examples for video question answering and video captioning.
 
 #### Parameters
@@ -310,6 +323,8 @@ You can configure the following hyperparameters at the top of the `inference_lan
 | `NUM_FRAMES` | `50` | Number of frames for video generation (Max: 121). *Unused for image tasks.* |
 | `VIDEO_HEIGHT` / `VIDEO_WIDTH`| `768` | Spatial resolution. *Unused for editing tasks (determined by input image/video).* |
 | `RESOLUTION` | `"video_480p"` | Base resolution preset (`image_768res` or `video_480p`). |
+| `CONFIG_PATH` | `""` | Optional path to a custom validation JSON/JSONL file. When empty, the task default example config is used. |
+| `ENHANCE_PROMPT` | `false` | Optional T2V/FF2V prompt rewrite switch. T2V uses text-only rewrite; FF2V uses text plus the input image. Prompt enhancement generally improves generation quality. Configure the rewrite API key and client in `common/utils/caption_rewrite.py` before setting this to `true`; without a key, we recommend writing prompts in the style of the provided examples. |
 
 </details>
 

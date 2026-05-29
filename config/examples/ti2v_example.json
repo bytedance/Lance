@@ -1,87 +1,156 @@
- {
+{
   "0001": {
     "interleave_array": [
-      "A close-up shot shows a young Indian woman smiling and speaking. She is slightly sideways to the camera, with her black long hair tied at the back of her head. She is wearing a red top with white polka dots, black-framed glasses and white flower-shaped earrings, and has obvious double chin. The woman's forehead is full, her eyes are bright, her nose bridge is relatively flat, her mouth is open revealing uneven teeth. The skin around her mouth is slightly loose with some fine lines. There are some small moles on her face. The background is a bookshelf full of books and some decorations. fixed shot. The woman is speaking happily and shaking her head. She glances at the right side of the screen and then continues to look to the left side of the screen.",
-      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000000_cond1.jpg",
-      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000000_tgt2.mp4"
+      "A snow leopard stands calmly near the edge of a glacier, observing the icy gap ahead. The snow leopard remains the dominant main subject throughout the entire sequence, shown in a medium-close to medium framing and occupying a strong, consistent portion of the frame. Its anatomy, body proportions, fur pattern, facial features, tail, and limbs remain visually consistent and anatomically correct at all times, with no distortion, shrinking, or unnatural deformation. The environment is a vast frozen glacier canyon with layered ice cliffs, deep blue crevasses, snow-covered ledges, drifting snow particles, and distant snowy ridges under a pale winter sky. Soft golden side light illuminates the snow leopard’s fur and creates subtle highlights across the ice surfaces. After a brief pause, the snow leopard performs a smooth, controlled slow-motion leap to the glacier on the opposite side. The motion is gentle and physically natural, with a soft push-off, subtle tail balance, and clear readable body movement. The camera smoothly follows the snow leopard and does not pull back to a wide distant view. The landing area on the opposite glacier remains relatively close in screen space, so the snow leopard stays large and prominent. After landing, the snow leopard remains a large foreground or mid-foreground subject, occupying about one-half to two-thirds of the frame, while the camera stays close and stable or slightly tracks forward. It lands steadily and returns to a calm stable stance. The glacier walls, snow surfaces, and distant ice formations remain visually stable without cracking or collapsing. The environment maintains soft natural motion with realistic snow atmosphere and physically consistent animal movement.",
+      "config/examples/text_image_to_video_examples/00001.png"
     ],
     "element_dtype_array": [
       "text",
-      "image",
-      "video"
+      "image"
     ],
     "istarget_in_interleave": [
       0,
-      0,
-      1
+      0
     ]
   },
   "0002": {
     "interleave_array": [
-      "An old-fashioned Korean drama with poor picture quality. A close shot shows a Korean man and a little girl looking at a blue game console. On the left side of the picture, the man has black medium-length hair with bangs covering his forehead. His eyes are looking down and he is wearing a dark blue hoodie. On the right side of the picture, the little girl has long black curly hair, wears a brown hairband with a fluffy ball, and is dressed in a white shirt and a dark waistcoat. She tilts her head and looks at the man with a smile. The background is blurry. The wall has texture, there is a light-colored cabinet on the left, and on the right, there is a blue backpack and a dark backpack hanging. a girl excitedly talks to a man, constantly shaking her head and raising her eyebrows. The man plays with the game console in his hand and nods.",
-      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000001_cond1.jpg",
-      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000001_tgt2.mp4"
+      "A cinematic wildlife shot shows a majestic stag standing at the edge of a quiet lake, surrounded by pale grasses and reeds, with a calm misty water surface extending across the foreground and a dense dark-green forest rising in the background. The stag is the clear main subject, shown with large branching antlers, a strong brown body, soft fur texture, and a calm alert expression. The lakeshore is detailed with damp grass, scattered reeds, and a thin layer of morning mist hovering just above the water. The background remains visually rich and natural, with tall evergreen trees, soft depth, and a peaceful early-day atmosphere. Gentle natural light falls across the stag’s body, creating subtle highlights on the fur, antlers, and the edge of the grass, while the lake reflects the quiet muted tones of the scene. The composition is tranquil, realistic, and highly detailed, with the stag remaining large and clearly readable in frame. steady camera. The stag slowly lowers its head toward the water in a smooth, controlled motion and begins to drink, creating only slight ripples on the lake surface. The surrounding mist drifts softly, the grass moves very lightly, and the overall scene remains calm, stable, and physically natural.",
+      "config/examples/text_image_to_video_examples/00002.png"
     ],
     "element_dtype_array": [
       "text",
-      "image",
-      "video"
+      "image"
     ],
     "istarget_in_interleave": [
       0,
-      0,
-      1
+      0
     ]
   },
   "0003": {
     "interleave_array": [
-      "A medium close up shot shows a middle-aged East Asian man sitting on a wooden chair with a red cushion in the meeting room. He has short grayish-black hair, a slightly square face, a round nose tip, and stubble on his upper lip and chin. His eyes glance to the left of the picture. He is wearing a white shirt and a dark blue jacket. In the background, there are several chairs with white cushions and wooden armrests, and the backrests of these chairs are covered with red cushions. On the gray wall in the background, there are some words and patterns. a medium shot of an Asian man speaking and gesturing. He briefly looks to the side and then faces forward again. The man speaks and raises his hand a little while looking to the side. He raises his hand again and looks to the side.",
-      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000002_cond1.jpg",
-      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000002_tgt2.mp4"
+      "A cinematic polar wildlife shot shows an emperor penguin standing near the edge of a flat ice shelf beside calm icy water, with its reflection clearly visible on the smooth blue-gray surface below. The penguin is the clear main subject, featuring a black head, white chest, soft yellow neck markings, a compact upright body, small dark feet, and smooth feather texture. The surrounding environment is cold, quiet, and minimal, with pale snow-covered ice, a slightly uneven frozen edge, distant flat ice fields, and soft overcast light creating a calm Antarctic atmosphere. The water remains still and reflective, with faint ripples near the ice edge and subtle texture across the surface. The scene feels clean, realistic, and highly detailed, keeping the penguin large and readable against the simple polar landscape. steady camera. The penguin slowly shifts its body toward the water, takes a small careful step at the edge, then gently hops into the water in a clear and natural motion. As it enters, a modest splash rises around its body and spreads outward into soft ripples, briefly breaking the reflection. The surrounding ice remains stable, the water movement stays physically natural, and the overall scene remains calm and believable.",
+      "config/examples/text_image_to_video_examples/00003.png"
     ],
     "element_dtype_array": [
       "text",
-      "image",
-      "video"
+      "image"
     ],
     "istarget_in_interleave": [
       0,
-      0,
-      1
+      0
     ]
   },
   "0004": {
     "interleave_array": [
-      "A Chinese TV drama with a sense of the times, a close shot shows a pair of Chinese man and woman walking on the street. The young woman on the left of the picture has a delicate appearance, smooth facial lines, and her hair is coiled up at the back of her head. She is wearing a pink coat with a red collar and silver earrings. Her eyes are looking to the right of the picture, seemingly a little shy. The man on the right of the picture is wearing a black cotton-padded jacket and black-framed glasses. He has an ordinary appearance with short black hair and a slightly round face. He lowers his head and looks downwards, seemingly speaking. The background is blurry, with some people and a black curtain hanging on a wooden frame. on the bustling street, a man in black turns his head and walks out of the frame to the right. A woman follows behind him and walks out of the frame to the right. Then a man in a gray waistcoat, with a red scarf around his neck, a black hat and small eyes, walks out of the tent, lowers his head and walks forward. The focus shifts and centers on the man in the gray waistcoat. He walks towards the camera. On the left side of the frame, a middle-aged Chinese man wearing a blue woolen coat, a fur waistcoat, a white inner lining, a yellow fur hat, a beard and an ordinary appearance, turns around and walks forward.",
-      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000003_cond1.jpg",
-      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000003_tgt2.mp4"
+      "A detailed cinematic wildlife shot shows a red fox standing in a snowy forest clearing, surrounded by soft white snow and dense evergreen trees whose branches are heavily coated with fresh snow. The fox is the clear main subject, positioned near the center of the frame with rich orange-red fur, a white chest and muzzle, dark slender legs, pointed ears, alert amber eyes, and a thick bushy tail dusted with snow. Fine snow clings lightly to its face, back, and tail, adding natural winter detail. The forest background is deep and layered, with tall dark tree trunks, soft atmospheric haze, and pale winter light filtering through the trees, creating a cold and beautiful atmosphere. The scene is realistic, highly detailed, and visually clean, with crisp fur texture, soft snow surface detail, and subtle depth throughout the forest path. tracking shot. The fox pauses briefly in the snow with an alert posture, then begins to move forward slowly through the snowy path in a smooth, natural motion. Its steps are light and measured, with gentle body movement and only small shifts in posture, while its paws press softly into the snow and lift tiny traces of loose powder. Its tail flows naturally behind for balance. The camera follows the fox steadily, keeping it large and readable in frame as it moves calmly through the winter forest, while faint snow particles drift in the air and the surrounding trees remain stable and serene.",
+      "config/examples/text_image_to_video_examples/00004.png"
     ],
     "element_dtype_array": [
       "text",
-      "image",
-      "video"
+      "image"
     ],
     "istarget_in_interleave": [
       0,
-      0,
-      1
+      0
     ]
   },
   "0005": {
     "interleave_array": [
-      "A close-up shot shows a hand holding a bag of Lay's potato chips. The packaging is mainly purple with red and white English letters on it. There are yellow potato chip patterns and a piece of ham on it. On the right are the same purple potato chips, and on the left are the same packaging of Lay's potato chips. In the background, shelves are filled with various bags of potato chips, including purple, red and white bags. a close-up shot shows a hand holding a bag of potato chips and slightly rotating it. The supermarket shelves in the background are filled with various bags of potato chips.",
-      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000004_cond1.jpg",
-      "/mnt/bn/fufengy-lf/code-0917/unified-video-gen/data/configs/infer_data/videos/video_idip_1ref/index000004_tgt2.mp4"
+      "A detailed cinematic close-up portrait shows a young woman in a softly lit indoor setting, her face centered and filling most of the frame. She has long brown hair falling naturally around her shoulders, warm brown eyes, natural eyebrows, natural skin texture, and a simple dark sleeveless top. The background is softly blurred with muted interior tones, creating an intimate atmosphere that keeps full attention on her face. Gentle natural lighting highlights her eyes, cheeks, lips, and hair strands, preserving realistic facial detail and soft depth. The subject remains stable and clearly readable, with natural proportions, fine facial texture, and expressive eyes. steady portrait shot. The woman takes a small uneven breath, her brows knitting together as her expression becomes more openly pained. The camera keeps her face stable and highly detailed.",
+      "config/examples/text_image_to_video_examples/00005.png"
     ],
     "element_dtype_array": [
       "text",
-      "image",
-      "video"
+      "image"
     ],
     "istarget_in_interleave": [
       0,
+      0
+    ]
+  },
+  "0006": {
+    "interleave_array": [
+      "A premium fantasy-anime shot shows a young forest elf girl standing in a glowing enchanted woodland, surrounded by tall dark trees, twisting branches, soft moss, lush plants, and countless floating fireflies. She is the clear main subject, positioned slightly to the right of center, with long flowing green hair, pointed elf ears, delicate facial features, large expressive eyes, and a small flower ornament near her hair. She wears an elegant green-and-white fantasy dress with gold trim, translucent sleeves, a jeweled collar detail, and soft layered fabric that catches the turquoise forest light. The background is deep and magical, with misty blue-green atmosphere, layered tree trunks fading into the distance, glowing particles, and warm firefly lights scattered throughout the scene. The lighting is dreamy and luminous, with a bright teal glow behind her creating a soft halo effect and subtle highlights on her hair, face, and dress. The scene feels peaceful, magical, and highly detailed, with refined color contrast, rich forest textures, and a strong main-subject presence. gentle tracking shot. She steps forward, then slowly turns her head to follow a cluster of fireflies crossing in front of her. Her expression stays quiet and curious while the teal light outlines her face and dress.",
+      "config/examples/text_image_to_video_examples/00006.png"
+    ],
+    "element_dtype_array": [
+      "text",
+      "image"
+    ],
+    "istarget_in_interleave": [
       0,
-      1
+      0
+    ]
+  },
+  "0007": {
+    "interleave_array": [
+      "A detailed cinematic full-body portrait shows a young woman standing indoors in a simple modern room, facing the camera with a calm and pleasant expression. She has long brown hair falling naturally over her shoulders, warm brown eyes, natural skin texture, and a relaxed upright posture. She wears a fitted black sleeveless top, light blue high-waisted jeans, and clean white sneakers. One hand is gently raised near the side of her head, while the other arm rests naturally by her side. The background is minimal and softly lit, with a plain light-colored wall, warm wooden floor, white baseboard, soft daylight entering from the left, and a green potted plant near the window adding a natural detail. The subject remains the clear main focus, centered in the frame with stable body proportions, clear facial detail, natural hands, and realistic clothing texture. slow push-in shot. She slowly and gently lifts her hand to lightly smooth her hair beside her head in a soft, graceful motion. She looks toward the camera and gradually shows a warm subtle smile, with slight natural blinking and a relaxed presence. As the action continues, the camera gradually moves closer from the full-body view toward her face, bringing more attention to her expression while the room remains calm and stable.",
+      "config/examples/text_image_to_video_examples/00007.png"
+    ],
+    "element_dtype_array": [
+      "text",
+      "image"
+    ],
+    "istarget_in_interleave": [
+      0,
+      0
+    ]
+  },
+  "0009": {
+    "interleave_array": [
+      "A warm cinematic interior shot shows a ginger cat sleeping peacefully on a sunlit wooden windowsill beside indoor plants and a wooden cabinet. The cat is the clear main subject, curled comfortably with soft orange fur, a striped tail, relaxed paws, closed eyes, and gentle breathing. Sunlight enters from the window, casting warm golden highlights across the cat’s fur, the polished wood, and nearby green leaves. The room feels quiet and cozy, with potted plants, soft shadows, natural window light, and warm wooden textures creating a peaceful domestic atmosphere. The background remains simple and stable, keeping attention on the sleeping cat while adding natural detail and depth. steady cozy shot. The curled cat stays relaxed, eyes opend, with a slow rise and fall of its body. The nearby plants move faintly, and warm wood textures remain stable.",
+      "config/examples/text_image_to_video_examples/00009.png"
+    ],
+    "element_dtype_array": [
+      "text",
+      "image"
+    ],
+    "istarget_in_interleave": [
+      0,
+      0
+    ]
+  },
+  "0010": {
+    "interleave_array": [
+      "A cinematic landscape shot shows a powerful waterfall plunging from a high moss-covered cliff into a misty river basin below, surrounded by lush green canyon walls, dark wet rock textures, and soft overcast daylight. A bright rainbow arches clearly across the lower mist in front of the waterfall, with vivid bands of red, orange, yellow, green, blue, and violet standing out against the white spray. The waterfall remains the dominant visual focus, with thick streams of white water pouring straight down in a continuous curtain, while mist rises and spreads across the base. The foreground shows a shallow rocky riverbank with dark pebbles and scattered stones, while the background is filled with layered green slopes, damp cliff faces, and soft atmospheric haze. The scene is majestic, fresh, and highly detailed, with rich natural textures, luminous mist, and a bright, clearly visible rainbow adding a vivid magical accent to the realistic landscape. calm cinematic shot. The waterfall, mist, and river move continuously while the surrounding moss-covered rock walls stay still. The rainbow gently flickers within the spray under soft daylight.",
+      "config/examples/text_image_to_video_examples/00010.png"
+    ],
+    "element_dtype_array": [
+      "text",
+      "image"
+    ],
+    "istarget_in_interleave": [
+      0,
+      0
+    ]
+  },
+  "00011": {
+    "interleave_array": [
+      "A detailed cinematic seaside shot shows a young woman standing barefoot on a long wooden pier at sunset, facing the ocean in a calm and reflective pose. She wears a flowing white sleeveless dress that moves softly in the sea breeze, and her long dark hair is gently blown back by the wind. One hand rests lightly on the weathered wooden railing, while the other hangs naturally by her side. The ocean stretches across the left side of the frame with soft rippling water reflecting warm golden sunlight from the low sun near the horizon. The sky is filled with glowing sunset tones, pale orange light, and scattered clouds, creating a peaceful romantic atmosphere. The pier extends deep into the distance on the right side, with repeating wooden planks and railings leading toward a small coastal town in the background, where houses and a few tiny figures appear softly blurred. The subject remains the clear visual focus, shown with natural body proportions, soft facial detail, and elegant posture, while the environment stays bright, airy, and highly detailed. slow tracking shot. The woman stands quietly for a moment looking out over the sea, then very slowly turns her head and upper body toward the camera in a gentle, unhurried motion. As she turns, her expression gradually softens into a warm subtle smile, and she slowly raises one hand to give a small delicate wave. Her dress and hair continue to sway lightly in the breeze, while the ocean surface shimmers softly and the entire sunset scene remains calm, graceful, and serene.",
+      "config/examples/text_image_to_video_examples/00008.png"
+    ],
+    "element_dtype_array": [
+      "text",
+      "image"
+    ],
+    "istarget_in_interleave": [
+      0,
+      0
+    ]
+  },
+  "0012": {
+    "interleave_array": [
+      "A detailed cinematic seaside shot shows a young woman standing barefoot on a long wooden pier at sunset, facing the ocean in a calm and reflective pose. She wears a flowing white sleeveless dress that moves softly in the sea breeze, and her long dark hair is gently blown back by the wind. One hand rests lightly on the weathered wooden railing, while the other hangs naturally by her side. The ocean stretches across the left side of the frame with soft rippling water reflecting warm golden sunlight from the low sun near the horizon. The sky is filled with glowing sunset tones, pale orange light, and scattered clouds, creating a peaceful romantic atmosphere. The pier extends deep into the distance on the right side, with repeating wooden planks and railings leading toward a small coastal town in the background, where houses and a few tiny figures appear softly blurred. The subject remains the clear visual focus, shown with natural body proportions, soft facial detail, and elegant posture, while the environment stays bright, airy, and highly detailed. slow push-in shot. She looks out over the ocean, then glances back toward the camera with a soft smile rather than a full turn. The hand near the railing remains relaxed, and the coastal town stays softly blurred.",
+      "config/examples/text_image_to_video_examples/00008.png"
+    ],
+    "element_dtype_array": [
+      "text",
+      "image"
+    ],
+    "istarget_in_interleave": [
+      0,
+      0
     ]
   }
 }

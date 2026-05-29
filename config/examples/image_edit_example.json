@@ -2,86 +2,71 @@
   "0001": {
     "interleave_array": [
       "Remove the hat from the painting.",
-      "config/examples/image_edit_examples/edit_img.jpg",
       "config/examples/image_edit_examples/edit_img.jpg"
     ],
     "element_dtype_array": [
       "text",
-      "image",
       "image"
     ],
     "istarget_in_interleave": [
       0,
-      0,
-      1
+      0
     ]
   },
   "0002": {
     "interleave_array": [
       "Add a pearl necklace around the woman's neck.",
-      "config/examples/image_edit_examples/edit_img.jpg",
       "config/examples/image_edit_examples/edit_img.jpg"
     ],
     "element_dtype_array": [
       "text",
-      "image",
       "image"
     ],
     "istarget_in_interleave": [
       0,
-      0,
-      1
+      0
     ]
   },
   "0003": {
     "interleave_array": [
       "Change the woman's action to forming a peace sign near her face.",
-      "config/examples/image_edit_examples/edit_img.jpg",
       "config/examples/image_edit_examples/edit_img.jpg"
     ],
     "element_dtype_array": [
       "text",
-      "image",
       "image"
     ],
     "istarget_in_interleave": [
       0,
-      0,
-      1
+      0
     ]
   },
   "0004": {
     "interleave_array": [
       "Convert the scene into 3D cartoon render style.",
-      "config/examples/image_edit_examples/edit_img.jpg",
       "config/examples/image_edit_examples/edit_img.jpg"
     ],
     "element_dtype_array": [
       "text",
-      "image",
       "image"
     ],
     "istarget_in_interleave": [
       0,
-      0,
-      1
+      0
     ]
   },
   "0005": {
     "interleave_array": [
       "Remove the hat from the painting, add an emerald necklace around the woman's neck, and change the woman's pose so she lightly touches her hair with one hand.",
-      "config/examples/image_edit_examples/edit_img.jpg",
       "config/examples/image_edit_examples/edit_img.jpg"
     ],
     "element_dtype_array": [
       "text",
-      "image",
       "image"
     ],
     "istarget_in_interleave": [
       0,
-      0,
-      1
+      0
     ]
 }
 }

@@ -2,52 +2,43 @@
   "0001": {
     "interleave_array": [
       "Change the car's color to red and change the background to a snowy road.",
-      "config/examples/video_edit_examples/edit_source_car.mp4",
       "config/examples/video_edit_examples/edit_source_car.mp4"
     ],
     "element_dtype_array": [
       "text",
-      "video",
       "video"
     ],
     "istarget_in_interleave": [
       0,
-      0,
-      1
+      0
     ]
   },
   "0002": {
     "interleave_array": [
       "Add square black sunglasses and replace the dress with a red hoodie.",
-      "config/examples/video_edit_examples/edit_source_woman.mp4",
       "config/examples/video_edit_examples/edit_source_woman.mp4"
     ],
     "element_dtype_array": [
       "text",
-      "video",
       "video"
     ],
     "istarget_in_interleave": [
       0,
-      0,
-      1
+      0
     ]
   },
   "0003": {
     "interleave_array": [
       "Change the background to a waterfall valley with cliffs and replace the short bob with long wavy hair.",
-      "config/examples/video_edit_examples/edit_source_woman.mp4",
       "config/examples/video_edit_examples/edit_source_woman.mp4"
     ],
     "element_dtype_array": [
       "text",
-      "video",
       "video"
     ],
     "istarget_in_interleave": [
       0,
-      0,
-      1
+      0
     ]
   }
 }

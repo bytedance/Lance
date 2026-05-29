@@ -230,6 +230,7 @@ class InferenceArguments(TrainingArguments):
 
     system_prompt_type:         str = "SP0"  # options: SP1, SP2 ...
     use_KVcache:                bool = False
+    enhance_prompt:             bool = False  # Rewrite T2V prompts before inference when enabled.
 
 
 @dataclass

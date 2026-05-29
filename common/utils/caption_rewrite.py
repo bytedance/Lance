@@ -5,6 +5,7 @@ import json
 import mimetypes
 import os
 import sys
+import warnings
 from pathlib import Path
 from typing import Any, Iterable, List
 
@@ -24,12 +25,14 @@ MAX_TOKENS = 2048
 THINKING_ENABLED = False
 THINKING_BUDGET_TOKENS = 2000
 
+
 # Configure the client here.
 def create_client(api_key: str | None = None):
     return openai.OpenAI(
         api_key=api_key or API_KEY,
         base_url=BASE_URL,
     )
+
 
 # Default values for caption rewrite.
 TEMPERATURE = 0.3
@@ -38,10 +41,40 @@ DEFAULT_I2V_STYLE_EXAMPLE_PATH = Path("config/examples/i2v_example.json")
 DEFAULT_NUM_STYLE_EXAMPLES = 6
 
 
-def has_rewrite_api_key(api_key: str | None = None) -> bool:
+def get_rewrite_config_error(api_key: str | None = None) -> str | None:
     key = api_key or API_KEY
     key = key.strip() if isinstance(key, str) else key
-    return bool(key) and not key.startswith("YOUR_")
+
+    model_name = MODEL_NAME.strip() if isinstance(MODEL_NAME, str) else MODEL_NAME
+    base_url = BASE_URL.strip() if isinstance(BASE_URL, str) else BASE_URL
+
+    if not key or key.startswith("YOUR_"):
+        return "API_KEY is not configured."
+    if not model_name or model_name.startswith("YOUR_"):
+        return "MODEL_NAME is not configured."
+    if not base_url or base_url.startswith("YOUR_"):
+        return "BASE_URL is not configured."
+    if not (base_url.startswith("http://") or base_url.startswith("https://")):
+        return f"BASE_URL should start with http:// or https://, got: {base_url}"
+
+    return None
+
+
+def has_valid_rewrite_config(api_key: str | None = None) -> bool:
+    error = get_rewrite_config_error(api_key)
+    if error:
+        warnings.warn(
+            f"Prompt rewrite is disabled: {error} "
+            "Please configure API_KEY, MODEL_NAME, and BASE_URL before using --ENHANCE_PROMPT true.",
+            RuntimeWarning,
+        )
+        return False
+    return True
+
+
+def has_rewrite_api_key(api_key: str | None = None) -> bool:
+    """Backward-compatible alias. It now checks the full rewrite config."""
+    return has_valid_rewrite_config(api_key)
 
 
 def load_style_examples(
@@ -252,8 +285,12 @@ def main() -> None:
     else:
         parser.error("Either prompt or --prompt-file is required.")
 
-    if not has_rewrite_api_key():
-        parser.error("API_KEY is not configured. Set API_KEY and create_client() at the top of this file first.")
+    config_error = get_rewrite_config_error()
+    if config_error:
+        parser.error(
+            f"{config_error} Set API_KEY, MODEL_NAME, and BASE_URL at the top of this file "
+            "or configure them before using --ENHANCE_PROMPT true."
+        )
 
     if args.mode == "i2v":
         if not args.image_path:

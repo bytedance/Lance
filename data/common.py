@@ -27,18 +27,20 @@ def generate_system_prompt(system_prompt_type="caption", vision_type="video"):
             f"Write an exhaustive depiction of the given {vision_type}, capturing its essence and key moments.",
             f"Describe the key features of the input {vision_type}, including color, shape, size, texture, objects, background.",
         ]
-    elif system_prompt_type == "t2v":
+    elif system_prompt_type == "t2v" or system_prompt_type == "i2v":
         str_list = [f"Describe the {vision_type} by detailing the color, quantity, visible text, shape, size, texture, spatial relationships and motion/camera movements of the objects and background:"]
     elif system_prompt_type == "t2i":
         str_list = [f"Describe the {vision_type} by detailing the color, quantity, text, shape, size, texture, spatial relationships of the objects and background:"]
     elif "edit" in system_prompt_type:
         str_list = [f"Describe the key features of the input {vision_type} (color, shape, size, texture, objects, background), then explain how the user’s text instruction should alter or modify the {vision_type}. Generate a new {vision_type} that meets the user’s requirements while maintaining consistency with the original input where appropriate."]
-    elif "idip" in system_prompt_type or system_prompt_type in ["ti2v", "i2v"]:
+    elif "idip" in system_prompt_type:
         str_list = [f"Describe the key features of the input image (color, shape, size, texture, objects, background, style), then incorporate the user’s text description to generate a new {vision_type} that satisfies the user’s requirements while preserving the essential identity and object or style information from the reference input."]
     elif 'maze' in system_prompt_type:
         str_list = [
             "Describe the key elements of the input maze image (layout, white path, black walls, blue star, red flag, and overall background), then generate a 2D animation. The blue star should slide smoothly along the white path, stop exactly on the red flag, and then acquire a trophy. Ensure the blue star never crosses or enters the black maze walls. Keep the camera as a static top-down view showing the entire maze."
         ]
+
+    print('str_list',str_list)
 
     return random.choice(str_list)
 

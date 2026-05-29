@@ -1219,7 +1219,7 @@ class ValidationDataset(Dataset):
         elif 'edit' in task:  # Video Editing or Image Editing
             self.sample_task = 'edit'
             return self.tiv2v_sample(idx)
-        elif 'idip' in task or task == "ti2v":  # Video IDIP, Image IDIP or TI2V
+        elif 'idip' in task:  # Video IDIP, Image IDIP
             self.sample_task = 'idip'
             return self.tiv2v_sample(idx)
         elif "i2v" in task:  # Text-Image-to-Video

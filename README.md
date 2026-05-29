@@ -213,7 +213,7 @@ bash inference_lance.sh \
   --SAVE_PATH_GEN results/t2v
 ```
 
-##### Text-Image-to-Video 
+##### Text-Image-to-Video
 
 ```bash
 bash inference_lance.sh \

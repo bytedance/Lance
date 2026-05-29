@@ -18,13 +18,13 @@ import openai
 
 # NOTE: Replace the following few lines for the model you want to use.
 API_KEY = "YOUR_API_KEY"
-MODEL_NAME = "gemini-3-pro-preview-new"
+MODEL_NAME = "YOUR_MODEL_NAME"
 BASE_URL = "https://api.openai.com/v1"
 MAX_TOKENS = 2048
 THINKING_ENABLED = False
 THINKING_BUDGET_TOKENS = 2000
 
-# Configure the client here. 
+# Configure the client here.
 def create_client(api_key: str | None = None):
     return openai.OpenAI(
         api_key=api_key or API_KEY,

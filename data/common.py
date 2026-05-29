@@ -27,7 +27,7 @@ def generate_system_prompt(system_prompt_type="caption", vision_type="video"):
             f"Write an exhaustive depiction of the given {vision_type}, capturing its essence and key moments.",
             f"Describe the key features of the input {vision_type}, including color, shape, size, texture, objects, background.",
         ]
-    elif system_prompt_type == "t2v" or system_prompt_type == "i2v":
+    elif system_prompt_type == "t2v":
         str_list = [f"Describe the {vision_type} by detailing the color, quantity, visible text, shape, size, texture, spatial relationships and motion/camera movements of the objects and background:"]
     elif system_prompt_type == "t2i":
         str_list = [f"Describe the {vision_type} by detailing the color, quantity, text, shape, size, texture, spatial relationships of the objects and background:"]

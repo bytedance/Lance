@@ -194,7 +194,7 @@ bash inference_lance.sh
 ```
 
 - 运行前，请先在 `inference_lance.sh` 顶部配置推理参数。
-- **支持任务：** `t2i`、`t2v`、`ti2v`、`ff2v`、`image_edit`、`video_edit`、`x2t_image` 和 `x2t_video`。你也可以在 `inference_lance.py` 中修改 `TASK_DEFAULT_CONFIGS`，自定义每个任务默认使用的数据样例。
+- **支持任务：** `t2i`、`t2v`、`ff2v`、`image_edit`、`video_edit`、`x2t_image` 和 `x2t_video`。你也可以在 `inference_lance.py` 中修改 `TASK_DEFAULT_CONFIGS`，自定义每个任务默认使用的数据样例。
 - **注意：** 对于所有任务，建议在编写输入 prompt 时参考提供示例中的 `prompt` 格式，这通常有助于获得更好的生成效果。
 
 

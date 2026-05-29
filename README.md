@@ -195,7 +195,7 @@ bash inference_lance.sh
 ```
 
 - Before running, please configure the inference parameters at the top of `inference_lance.sh`.
-- **Supported tasks:** `t2i`, `t2v`, `ti2v`, `ff2v`, `image_edit`, `video_edit`, `x2t_image`, and `x2t_video`. You can modify `TASK_DEFAULT_CONFIGS` in `inference_lance.py` to customize the default data samples for each task.
+- **Supported tasks:** `t2i`, `t2v`, `ff2v`, `image_edit`, `video_edit`, `x2t_image`, and `x2t_video`. You can modify `TASK_DEFAULT_CONFIGS` in `inference_lance.py` to customize the default data samples for each task.
 - **Note:** For all tasks, we recommend following the `prompt` format used in the provided examples when writing input prompts, as this typically leads to better generation quality.
 
 #### Task Examples

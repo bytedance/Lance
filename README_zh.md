@@ -37,6 +37,7 @@
 
 ## 🔥 更新
 
+- **`2026/06/03`**: 🚀 Lance 现已被 [vLLM-Omni](https://github.com/vllm-project/vllm-omni) 支持。查看 [recipe](https://github.com/vllm-project/vllm-omni/blob/main/recipes/ByteDance/Lance.md)！
 - **`2026/05/29`**: 🔥 增加 image-to-video generation 代码支持：文本-图像到视频生成（首帧到视频）。[查看示例](assets/docs/changelog/2026-05-29.md)！
 - **`2026/05/26`**: 🎨 Gradio 界面现已支持图像和视频生成、编辑与理解任务。[欢迎体验](assets/docs/changelog/2026-05-26.md)！
 - **`2026/05/25`**: ✨ [Hugging Face Space](https://huggingface.co/spaces/bytedance-research/Lance) 已上线，感谢 HF 团队的支持！

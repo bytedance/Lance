@@ -37,6 +37,7 @@
 
 ## 🔥 Updates
 
+- **`2026/06/03`**: 🚀 Lance is now supported in [vLLM-Omni](https://github.com/vllm-project/vllm-omni). See the [recipe](https://github.com/vllm-project/vllm-omni/blob/main/recipes/ByteDance/Lance.md)!
 - **`2026/05/29`**: 💪 Added support for Image-to-Video generation. [More to see](assets/docs/changelog/2026-05-29.md)!
 - **`2026/05/26`**: 🎨 The Gradio interface now supports image and video generation, editing, and understanding. [Try it out](assets/docs/changelog/2026-05-26.md)!
 - **`2026/05/25`**: ✨ The [Hugging Face Space](https://huggingface.co/spaces/bytedance-research/Lance) is now live, thanks to the HF team!

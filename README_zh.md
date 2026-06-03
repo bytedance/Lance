@@ -38,7 +38,7 @@
 ## 🔥 更新
 
 - **`2026/06/03`**: 🚀 Lance 现已被 [vLLM-Omni](https://github.com/vllm-project/vllm-omni) 支持。查看 [recipe](https://github.com/vllm-project/vllm-omni/blob/main/recipes/ByteDance/Lance.md)！
-- **`2026/05/29`**: 🔥 增加 image-to-video generation 代码支持：文本-图像到视频生成（首帧到视频）。[查看示例](assets/docs/changelog/2026-05-29.md)！
+- **`2026/05/29`**: 🔥 增加 Image-to-Video generation 支持。[查看更多](assets/docs/changelog/2026-05-29.md)！
 - **`2026/05/26`**: 🎨 Gradio 界面现已支持图像和视频生成、编辑与理解任务。[欢迎体验](assets/docs/changelog/2026-05-26.md)！
 - **`2026/05/25`**: ✨ [Hugging Face Space](https://huggingface.co/spaces/bytedance-research/Lance) 已上线，感谢 HF 团队的支持！
 - **`2026/05/19`**: 🤗 技术报告现已发布于 [arXiv](http://arxiv.org/abs/2605.18678)。
@@ -214,7 +214,7 @@ bash inference_lance.sh \
   --SAVE_PATH_GEN results/t2v
 ```
 
-##### 文本-图像到视频生成（首帧到视频）
+##### 图生视频
 
 ```bash
 bash inference_lance.sh \
@@ -229,7 +229,7 @@ bash inference_lance.sh \
 
 生成任务可选参数：
 
-- `--ENHANCE_PROMPT true`：启用 T2V/I2V prompt rewrite。prompt enhance rewrite 通常能提升生成效果。启用前请先在 `common/utils/caption_rewrite.py` 中配置 `API_KEY`、`MODEL_NAME` 和 `client`；如果没有配置有效 key，会自动跳过 prompt rewrite，此时建议尽量参考提供示例中的 prompt 风格手写输入。
+- `--ENHANCE_PROMPT true`：启用 T2V/I2V prompt rewrite。prompt enhance rewrite 通常能提升生成效果。该选项需要 `openai==2.26.0`，已写入 `requirements.txt`；如果没有通过 `requirements.txt` 安装依赖，请先执行 `pip install openai==2.26.0`。启用前请先在 `common/utils/caption_rewrite.py` 中配置 `API_KEY`、`MODEL_NAME` 和 `BASE_URL`；如果没有配置有效 rewrite 参数，会自动跳过 prompt rewrite，此时建议尽量参考提供示例中的 prompt 风格手写输入。
 
 ##### 文生图
 
@@ -297,7 +297,7 @@ bash inference_lance.sh \
 |------------------------|--------------------------------------------------|----------------------------------------------|
 | `t2v` | 文生视频 | `config/examples/t2v_example.json` |
 | `t2i` | 文生图 | `config/examples/t2i_example.json` |
-| `i2v` | 首帧到视频生成 | `config/examples/i2v_example.json` |
+| `i2v` | 图生视频 | `config/examples/i2v_example.json` |
 | `image_edit` | 图像编辑 | `config/examples/image_edit_example.json` |
 | `video_edit` | 视频编辑 | `config/examples/video_edit_example.json` |
 | `x2t_image` | 图像理解 | `config/examples/x2t_image_example.json` |
@@ -324,7 +324,7 @@ bash inference_lance.sh \
 | `VIDEO_HEIGHT` / `VIDEO_WIDTH`| `768` | 空间分辨率。*编辑任务不使用该参数（由输入图像/视频决定）。* |
 | `RESOLUTION` | `"video_480p"` | 基础分辨率预设（如 `image_768res` 或 `video_480p`）。 |
 | `CONFIG_PATH` | `""` | 可选的自定义验证 JSON/JSONL 文件路径。为空时使用任务默认示例配置。 |
-| `ENHANCE_PROMPT` | `false` | 可选的 T2V/I2V prompt rewrite 开关。T2V 使用纯文本 rewrite，I2V 使用文本加输入图像 rewrite。prompt enhance rewrite 通常能提升生成效果。启用前请先在 `common/utils/caption_rewrite.py` 中配置 API key 和 client；如果没有 key，建议尽量参考提供示例中的 prompt 风格手写输入。 |
+| `ENHANCE_PROMPT` | `false` | 可选的 T2V/I2V prompt rewrite 开关。T2V 使用纯文本 rewrite，I2V 使用文本加输入图像 rewrite。prompt enhance rewrite 通常能提升生成效果。该选项需要 `openai==2.26.0`，已写入 `requirements.txt`；也可以手动执行 `pip install openai==2.26.0`。启用前请先在 `common/utils/caption_rewrite.py` 中配置 `API_KEY`、`MODEL_NAME` 和 `BASE_URL`；如果没有有效 rewrite 参数，建议尽量参考提供示例中的 prompt 风格手写输入。 |
 
 </details>
 

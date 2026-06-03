@@ -148,7 +148,7 @@ def build_i2v_rewrite_instruction(prompt: str, style_examples: List[str]) -> str
         f"Style example {idx + 1}:\n{example}"
         for idx, example in enumerate(style_examples)
     )
-    return f"""You are a professional prompt rewriter for first-frame-to-video generation.
+    return f"""You are a professional prompt rewriter for text-image-to-video generation.
 
 You are given an input text prompt and a reference image. Rewrite them into one polished English video prompt that matches the style of the reference examples.
 

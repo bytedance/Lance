@@ -128,6 +128,12 @@ def video_seconds_to_num_frames(seconds: int) -> int:
     seconds = max(1, min(10, int(seconds)))
     return 12 * seconds + 1
 
+def get_default_video_duration_seconds(task: str) -> int:
+    internal_task = normalize_task(task)
+    if internal_task == TASK_I2V:
+        return DEFAULT_I2V_DURATION_SECONDS
+    return DEFAULT_T2V_DURATION_SECONDS
+
 def normalize_task(task: str) -> str:
     task_key = (task or TASK_LABEL_VIDEO_GENERATION).strip()
     task = TASK_LABEL_TO_INTERNAL.get(task_key, TASK_LABEL_TO_INTERNAL.get(task_key.lower(), ""))
@@ -157,7 +163,7 @@ def get_resolution_choices_for_task(task: str) -> list[str | tuple[str, str]]:
     internal_task = normalize_task(task)
     if internal_task in IMAGE_TASKS:
         return IMAGE_RESOLUTION_CHOICES
-    if internal_task == TASK_T2V:
+    if internal_task in {TASK_T2V, TASK_I2V}:
         return VIDEO_RESOLUTION_DISPLAY_CHOICES
     if internal_task == TASK_VIDEO_EDIT:
         return VIDEO_EDIT_RESOLUTION_CHOICES
@@ -169,11 +175,8 @@ def get_default_resolution_for_task(task: str) -> str:
     internal_task = normalize_task(task)
     if internal_task in IMAGE_TASKS:
         return DEFAULT_IMAGE_RESOLUTION
-    # Video Generation should default to the lightweight/recommended 360p profile.
-    # This is used by both task switching and recommended-case click handlers
-    # through reset_generation_defaults_for_task(), so every Video Generation
-    # example fill now returns video_360p instead of falling through to 480p.
-    if internal_task == TASK_T2V:
+    # Text-to-Video and Image-to-Video default to the lightweight/recommended 360p profile.
+    if internal_task in {TASK_T2V, TASK_I2V}:
         return DEFAULT_RESOLUTION
     if internal_task == TASK_VIDEO_EDIT:
         return DEFAULT_VIDEO_EDIT_RESOLUTION
@@ -193,6 +196,12 @@ def get_default_aspect_ratio(task: str) -> str:
     internal_task = normalize_task(task)
     return DEFAULT_IMAGE_ASPECT_RATIO if internal_task in IMAGE_TASKS else DEFAULT_VIDEO_ASPECT_RATIO
 
+def normalize_aspect_ratio_for_task(task: str, aspect_ratio: Optional[str]) -> str:
+    internal_task = normalize_task(task)
+    if internal_task == TASK_I2V:
+        return get_default_aspect_ratio(internal_task)
+    return aspect_ratio if aspect_ratio in ASPECT_RATIO_CHOICES else get_default_aspect_ratio(internal_task)
+
 def normalize_video_resolution(resolution: Optional[str], task: Optional[str] = None) -> str:
     if task is None:
         return resolution if resolution in VIDEO_RESOLUTION_CHOICES else DEFAULT_RESOLUTION
@@ -202,7 +211,7 @@ def normalize_video_resolution(resolution: Optional[str], task: Optional[str] = 
 
 def get_size_for_aspect_ratio(task: str, aspect_ratio: str, video_resolution: Optional[str] = None) -> tuple[int, int]:
     internal_task = normalize_task(task)
-    aspect_ratio = aspect_ratio if aspect_ratio in ASPECT_RATIO_CHOICES else get_default_aspect_ratio(internal_task)
+    aspect_ratio = normalize_aspect_ratio_for_task(internal_task, aspect_ratio)
     if internal_task in IMAGE_TASKS:
         size_map = IMAGE_ASPECT_RATIO_TO_SIZE
     else:
@@ -283,6 +292,7 @@ def build_lance_icon_label_html(text: str, icon: str, *extra_classes: str) -> st
     return f'<div class="{class_names}">{icon_html}<span class="lance-output-label-text">{html.escape(text)}</span></div>'
 
 def update_size_from_aspect_ratio(task: str, aspect_ratio: str, video_resolution: Optional[str] = None):
+    aspect_ratio = normalize_aspect_ratio_for_task(task, aspect_ratio)
     width, height = get_size_for_aspect_ratio(task, aspect_ratio, video_resolution)
     return height, width, gr.update(
         choices=get_output_resolution_choices_for_task(task, video_resolution),
@@ -290,6 +300,7 @@ def update_size_from_aspect_ratio(task: str, aspect_ratio: str, video_resolution
     )
 
 def update_output_resolution_from_video_profile(task: str, aspect_ratio: str, video_resolution: str):
+    aspect_ratio = normalize_aspect_ratio_for_task(task, aspect_ratio)
     width, height = get_size_for_aspect_ratio(task, aspect_ratio, video_resolution)
     return (
         gr.update(
@@ -305,7 +316,7 @@ def reset_generation_defaults_for_task(task: str):
     aspect_ratio = get_default_aspect_ratio(internal_task)
     resolution = get_default_resolution_for_task(internal_task)
     width, height = get_size_for_aspect_ratio(internal_task, aspect_ratio, resolution)
-    num_frames = DEFAULT_VIDEO_DURATION_SECONDS
+    num_frames = get_default_video_duration_seconds(internal_task)
     return aspect_ratio, height, width, num_frames, resolution, gr.update(
         choices=get_output_resolution_choices_for_task(internal_task, resolution),
         value=format_size_markdown(internal_task, width, height),
@@ -359,6 +370,16 @@ def create_request_json(
         payload = {"000000.mp4": prompt}
     elif task == TASK_T2I:
         payload = {"000000.png": prompt}
+    elif task == TASK_I2V:
+        if not input_image:
+            raise ValueError("The image-to-video task requires an input image.")
+        payload = {
+            "000000": {
+                "interleave_array": [prompt, input_image],
+                "element_dtype_array": ["text", "image"],
+                "istarget_in_interleave": [0, 0],
+            }
+        }
     elif task == TASK_VIDEO_EDIT:
         if not input_video:
             raise ValueError("The video edit task requires an input video.")
@@ -588,6 +609,16 @@ def make_edit_examples(task_label: str, relative_path: str, limit: int, media_ty
             examples.append([prompt, None, None, image_path, image_path])
     return examples
 
+def make_i2v_examples(relative_path: str, limit: int) -> list[list]:
+    data = load_json_examples(relative_path)
+    examples = []
+    for sample in list(data.values())[:limit]:
+        interleave = sample["interleave_array"]
+        prompt = interleave[0]
+        image_path = resolve_example_path(interleave[1])
+        examples.append([prompt, None, None, image_path, image_path])
+    return examples
+
 def make_understanding_examples(task_label: str, relative_path: str, limit: int, media_type: str) -> list[list]:
     data = load_json_examples(relative_path)
     examples = []
@@ -617,6 +648,10 @@ VIDEO_EDIT_EXAMPLES = make_edit_examples(
     "config/examples/video_edit_example.json",
     limit=3,
     media_type="video",
+)
+IMAGE_TO_VIDEO_EXAMPLES = make_i2v_examples(
+    "config/examples/i2v_example.json",
+    limit=6,
 )
 VIDEO_UNDERSTANDING_EXAMPLES = make_understanding_examples(
     TASK_LABEL_VIDEO_UNDERSTANDING,

@@ -51,9 +51,10 @@ def update_task_ui(task: str):
     is_image_task = internal_task in IMAGE_TASKS
     is_edit_task = internal_task in EDIT_TASKS
     is_understanding_task = internal_task in UNDERSTANDING_TASKS
-    is_text_to_visual_task = internal_task in {TASK_T2V, TASK_T2I}
+    is_text_to_visual_task = internal_task in {TASK_T2V, TASK_T2I, TASK_I2V}
     resolution_choices = get_resolution_choices_for_task(internal_task)
     resolution_value = get_default_resolution_for_task(internal_task)
+    video_duration_value = get_default_video_duration_seconds(internal_task)
     aspect_ratio_value = DEFAULT_IMAGE_ASPECT_RATIO if is_image_task else DEFAULT_VIDEO_ASPECT_RATIO
     width_value, height_value = get_size_for_aspect_ratio(internal_task, aspect_ratio_value, resolution_value)
     size_markdown = format_size_markdown(internal_task, width_value, height_value)
@@ -69,7 +70,7 @@ def update_task_ui(task: str):
         text_label = "Question"
         text_placeholder = "Ask a question about the input..."
 
-    if internal_task in {TASK_T2V, TASK_VIDEO_EDIT}:
+    if internal_task in {TASK_T2V, TASK_I2V, TASK_VIDEO_EDIT}:
         output_label = "Output Video"
     elif internal_task in {TASK_T2I, TASK_IMAGE_EDIT}:
         output_label = "Output Image"
@@ -77,10 +78,10 @@ def update_task_ui(task: str):
         output_label = "Output Text"
 
     output_icon = "video" if output_label == "Output Video" else "image" if output_label == "Output Image" else "text"
-    show_aspect_ratio = is_text_to_visual_task
+    show_aspect_ratio = internal_task in {TASK_T2V, TASK_T2I}
     show_input_video = internal_task in {TASK_VIDEO_EDIT, TASK_X2T_VIDEO}
-    show_input_image = internal_task in {TASK_IMAGE_EDIT, TASK_X2T_IMAGE}
-    show_video_resolution_settings = internal_task == TASK_T2V
+    show_input_image = internal_task in {TASK_I2V, TASK_IMAGE_EDIT, TASK_X2T_IMAGE}
+    show_video_resolution_settings = internal_task in {TASK_T2V, TASK_I2V}
 
     return (
         gr.update(value=build_lance_label_html(text_label, "lance-prompt-label")),
@@ -101,19 +102,20 @@ def update_task_ui(task: str):
         gr.update(label="Input Image", visible=show_input_image, value=None),
         gr.update(visible=show_aspect_ratio),
         gr.update(visible=False),
-        gr.update(visible=internal_task == TASK_T2V),
+        gr.update(visible=internal_task in {TASK_T2V, TASK_I2V}),
         gr.update(visible=show_video_resolution_settings),
         gr.update(choices=get_aspect_ratio_choices_for_task(internal_task), value=aspect_ratio_value, visible=show_aspect_ratio),
         gr.update(value=height_value),
         gr.update(value=width_value),
         gr.update(choices=get_output_resolution_choices_for_task(internal_task, resolution_value), value=size_markdown, visible=False),
-        gr.update(visible=internal_task == TASK_T2V, value=DEFAULT_VIDEO_DURATION_SECONDS),
+        gr.update(visible=internal_task in {TASK_T2V, TASK_I2V}, value=video_duration_value),
         gr.update(choices=resolution_choices, value=resolution_value, visible=show_video_resolution_settings),
         gr.update(value=build_lance_icon_label_html(output_label, output_icon, "lance-output-label")),
-        gr.update(visible=internal_task in {TASK_T2V, TASK_VIDEO_EDIT}),
+        gr.update(visible=internal_task in {TASK_T2V, TASK_I2V, TASK_VIDEO_EDIT}),
         gr.update(visible=internal_task in {TASK_T2I, TASK_IMAGE_EDIT}),
         gr.update(visible=is_understanding_task, value=""),
         gr.update(visible=internal_task == TASK_T2V),
+        gr.update(visible=internal_task == TASK_I2V),
         gr.update(visible=internal_task == TASK_VIDEO_EDIT),
         gr.update(visible=internal_task == TASK_X2T_VIDEO),
         gr.update(visible=internal_task == TASK_T2I),
@@ -277,7 +279,10 @@ def build_demo(run_task_fn: Callable) -> gr.Blocks:
             return group, buttons
 
         video_generation_examples_group, video_generation_example_buttons = examples_section(
-            "Video generation recommended cases", VIDEO_GENERATION_EXAMPLES, visible=True
+            "Text-to-Video recommended cases", VIDEO_GENERATION_EXAMPLES, visible=True
+        )
+        image_to_video_examples_group, image_to_video_example_buttons = examples_section(
+            "Image-to-Video recommended cases", IMAGE_TO_VIDEO_EXAMPLES, media_type="image"
         )
         video_edit_examples_group, video_edit_example_buttons = examples_section(
             "Video edit recommended cases", VIDEO_EDIT_EXAMPLES, media_type="video"
@@ -286,7 +291,7 @@ def build_demo(run_task_fn: Callable) -> gr.Blocks:
             "Video understanding recommended cases", VIDEO_UNDERSTANDING_EXAMPLES, media_type="video"
         )
         image_generation_examples_group, image_generation_example_buttons = examples_section(
-            "Image generation recommended cases", IMAGE_GENERATION_EXAMPLES
+            "Text-to-Image recommended cases", IMAGE_GENERATION_EXAMPLES
         )
         image_edit_examples_group, image_edit_example_buttons = examples_section(
             "Image edit recommended cases", IMAGE_EDIT_EXAMPLES, media_type="image"
@@ -319,6 +324,7 @@ def build_demo(run_task_fn: Callable) -> gr.Blocks:
                 output_image,
                 output_text,
                 video_generation_examples_group,
+                image_to_video_examples_group,
                 video_edit_examples_group,
                 video_understanding_examples_group,
                 image_generation_examples_group,
@@ -356,7 +362,8 @@ def build_demo(run_task_fn: Callable) -> gr.Blocks:
             )
 
         for example_button, example_prompt, example_video, example_image in (
-            video_edit_example_buttons
+            image_to_video_example_buttons
+            + video_edit_example_buttons
             + video_understanding_example_buttons
             + image_edit_example_buttons
             + image_understanding_example_buttons

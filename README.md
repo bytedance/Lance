@@ -229,7 +229,7 @@ bash inference_lance.sh \
 
 Optional parameters for video generation task examples:
 
-- `--ENHANCE_PROMPT true`: enable prompt rewrite for T2V/I2V. Prompt enhancement generally improves generation quality. Before enabling it, set `API_KEY`, `MODEL_NAME`, and `client` in `common/utils/caption_rewrite.py`. If no API key is configured there, prompt rewrite is skipped; in that case, we recommend **writing prompts in the style of the provided examples**.
+- `--ENHANCE_PROMPT true`: enable prompt rewrite for T2V/I2V. Prompt enhancement generally improves generation quality. This option requires `openai==2.26.0`, which is already listed in `requirements.txt`; if you did not install from `requirements.txt`, run `pip install openai==2.26.0` first. Before enabling it, set `API_KEY`, `MODEL_NAME`, and `BASE_URL` in `common/utils/caption_rewrite.py`. If no valid rewrite config is provided there, prompt rewrite is skipped; in that case, we recommend **writing prompts in the style of the provided examples**.
 
 ##### Text-to-Image
 
@@ -298,7 +298,7 @@ Optional parameters for all task examples:
 |------------------------|--------------------------------------------------|----------------------------------------------|
 | `t2v`                  | Text-to-Video generation                         | `config/examples/t2v_example.json`           |
 | `t2i`                  | Text-to-Image generation                         | `config/examples/t2i_example.json`           |
-| `i2v`                 | Image-to-Video generation                        | `config/examples/i2v_example.json`          |
+| `i2v`                  | Image-to-Video generation                        | `config/examples/i2v_example.json`           |
 | `image_edit`           | Image editing                                    | `config/examples/image_edit_example.json`    |
 | `video_edit`           | Video editing                                    | `config/examples/video_edit_example.json`    |
 | `x2t_image`            | Image understanding            | `config/examples/x2t_image_example.json`    |
@@ -325,7 +325,7 @@ You can configure the following hyperparameters at the top of the `inference_lan
 | `VIDEO_HEIGHT` / `VIDEO_WIDTH`| `768` | Spatial resolution. *Unused for editing tasks (determined by input image/video).* |
 | `RESOLUTION` | `"video_480p"` | Base resolution preset (`image_768res` or `video_480p`). |
 | `CONFIG_PATH` | `""` | Optional path to a custom validation JSON/JSONL file. When empty, the task default example config is used. |
-| `ENHANCE_PROMPT` | `false` | Optional T2V/I2V prompt rewrite switch. T2V uses text-only rewrite; I2V uses text plus the input image. Prompt enhancement generally improves generation quality. Configure the rewrite API key and client in `common/utils/caption_rewrite.py` before setting this to `true`; without a key, we recommend writing prompts in the style of the provided examples. |
+| `ENHANCE_PROMPT` | `false` | Optional T2V/I2V prompt rewrite switch. T2V uses text-only rewrite; I2V uses text plus the input image. Prompt enhancement generally improves generation quality. This option requires `openai==2.26.0`; it is included in `requirements.txt`, or install it manually with `pip install openai==2.26.0`. Configure `API_KEY`, `MODEL_NAME`, and `BASE_URL` in `common/utils/caption_rewrite.py` before setting this to `true`; without a valid rewrite config, we recommend writing prompts in the style of the provided examples. |
 
 </details>
 

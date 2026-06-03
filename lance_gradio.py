@@ -208,7 +208,7 @@ class LanceT2VV2TPipeline:
             if inference_args.visual_gen:
                 stage_start = time.perf_counter()
                 print(f"[startup][gpu:{self.device}] Initializing VAE", flush=True)
-                vae_model = WanVideoVAE(device=torch.device("cuda", self.device))
+                vae_model = WanVideoVAE()
                 vae_config = deepcopy(vae_model.vae_config)
                 self._log_stage("VAE init", stage_start)
             else:
@@ -405,7 +405,7 @@ class LanceT2VV2TPipeline:
             return None, None, "", "Please enter a question."
         if internal_task in {TASK_VIDEO_EDIT, TASK_X2T_VIDEO} and not input_video:
             return None, None, "", "Please upload an input video."
-        if internal_task in {TASK_IMAGE_EDIT, TASK_X2T_IMAGE} and not input_image:
+        if internal_task in {TASK_I2V, TASK_IMAGE_EDIT, TASK_X2T_IMAGE} and not input_image:
             return None, None, "", "Please upload an input image."
         if height <= 0 or width <= 0:
             return None, None, "", "Height and width must be greater than 0."
@@ -456,8 +456,6 @@ class LanceT2VV2TPipeline:
             request_inference_args.task = internal_task
             request_inference_args.text_template = TEXT_TEMPLATE
             request_inference_args.prompt_data_dict = {}
-            request_inference_args.offload_vae_during_denoise = True
-
             try:
                 print(
                     "[lance_gradio_t2v_v2t] Start generation "
@@ -493,7 +491,7 @@ class LanceT2VV2TPipeline:
                 save_prompt_results(request_inference_args.prompt_data_dict, request_inference_args.save_path_gen, self.logger)
                 clean_memory()
 
-                video_path = find_generated_video(save_dir) if internal_task in {TASK_T2V, TASK_VIDEO_EDIT} else None
+                video_path = find_generated_video(save_dir) if internal_task in {TASK_T2V, TASK_I2V, TASK_VIDEO_EDIT} else None
                 image_path = find_generated_image(save_dir) if internal_task in {TASK_T2I, TASK_IMAGE_EDIT} else None
                 text_result = extract_text_result(save_dir) if internal_task in UNDERSTANDING_TASKS else ""
                 record = {
@@ -526,7 +524,7 @@ class LanceT2VV2TPipeline:
                     "image_path": str(image_path) if image_path is not None else "",
                     "text_result": text_result,
                 }
-                if internal_task in {TASK_T2V, TASK_VIDEO_EDIT} and video_path is None:
+                if internal_task in {TASK_T2V, TASK_I2V, TASK_VIDEO_EDIT} and video_path is None:
                     record["status"] = "completed_without_video"
                 if internal_task in {TASK_T2I, TASK_IMAGE_EDIT} and image_path is None:
                     record["status"] = "completed_without_image"
@@ -534,7 +532,7 @@ class LanceT2VV2TPipeline:
                     record["status"] = "completed_without_text"
                 save_generation_record(record, save_dir)
 
-                if internal_task in {TASK_T2V, TASK_VIDEO_EDIT}:
+                if internal_task in {TASK_T2V, TASK_I2V, TASK_VIDEO_EDIT}:
                     if video_path is None:
                         status = (
                             "Inference completed, but no output video was found.\n\n"
@@ -776,7 +774,7 @@ def run_task(
         return None, None, "", "Please enter a question."
     if internal_task in {TASK_VIDEO_EDIT, TASK_X2T_VIDEO} and not input_video:
         return None, None, "", "Please upload an input video."
-    if internal_task in {TASK_IMAGE_EDIT, TASK_X2T_IMAGE} and not input_image:
+    if internal_task in {TASK_I2V, TASK_IMAGE_EDIT, TASK_X2T_IMAGE} and not input_image:
         return None, None, "", "Please upload an input image."
     if height <= 0 or width <= 0:
         return None, None, "", "Height and width must be greater than 0."
@@ -786,7 +784,7 @@ def run_task(
     num_frames_ui = int(num_frames)
     normalized_resolution = normalize_resolution_for_backend(str(resolution), internal_task)
 
-    if internal_task == TASK_T2V:
+    if internal_task in {TASK_T2V, TASK_I2V}:
         num_frames = video_seconds_to_num_frames(num_frames_ui)
 
     return run_task_gpu(

@@ -1037,7 +1037,7 @@ class ValidationDataset(Dataset):
 
             if len(text_template_user) > 0 and text_template_user[0]['type'] == 'text':
                 text_template_user = text_template_user[1:] + text_template_user[:1]
-            caption_instruction = generate_system_prompt(system_prompt_type=self.data_config.task, vision_type=element_dtype)
+            caption_instruction = generate_system_prompt(system_prompt_type=self.data_config.task, vision_type=self.data_config.target_modality)
             all_token_id, spans_index, tgt_index, search_index = self.render_template(caption_instruction, text_template_assistant, text_template_user, vit_num_tokens, search_text=search_text)
             self.sample, curr, curr_rope_id, curr_split_len = self.process_text_template(
                 all_token_id,

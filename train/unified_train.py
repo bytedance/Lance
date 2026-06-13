@@ -60,7 +60,6 @@ from train.train_utils import (
     build_lr_scheduler,
     build_train_dataset_config,
     compute_training_loss,
-    get_fixed_validation_data,
     get_image_token_id,
     log_training_metrics,
     load_training_state,
@@ -74,7 +73,6 @@ from train.train_utils import (
     setup_ema_and_load_checkpoint,
     setup_model_components,
     setup_rank0_logging_and_wandb,
-    validate_on_fixed_batch,
 )
 
 
@@ -208,18 +206,10 @@ def main():
     dataset_config = build_train_dataset_config(data_args, model_args, training_args, vae_config)
 
     if training_args.validation_step > 0:
-        val_data_cpu = get_fixed_validation_data(
-            data_args=data_args,
-            model_args=model_args,
-            training_args=training_args,
-            tokenizer=tokenizer,
-            new_token_ids=new_token_ids,
-            image_token_id=image_token_id,
-            GLOBAL_RANK=GLOBAL_RANK,
-            WORLD_SIZE=WORLD_SIZE,
-            DEVICE=DEVICE,
-            log_rank0=log_rank0,
+        log_rank0(
+            f"validation_step={training_args.validation_step}, but validation is not implemented yet in train/unified_train.py. Skip validation."
         )
+        training_args.validation_step = -1
 
     train_dataset = PackedDataset(
         dataset_config,
@@ -363,22 +353,6 @@ def main():
                     blocking=(curr_step >= (training_args.total_steps - 1)),
                     source_model_path=model_args.model_path,
                 )
-            if (training_args.validation_step > 0) and ((curr_step == training_args.ckpt_debug_steps) or (curr_step % training_args.validation_step == 0)):
-                validate_on_fixed_batch(
-                    fsdp_model=fsdp_model,
-                    vae_model=vae_model,
-                    tokenizer=tokenizer,
-                    val_data_cpu=val_data_cpu,
-                    training_args=training_args,
-                    model_args=model_args,
-                    data_args=data_args,
-                    curr_step=curr_step,
-                    logger=logger,
-                    new_token_ids=new_token_ids,
-                    image_token_id=image_token_id,
-                    device=DEVICE,
-                )
-
         except Exception:
             logger.error(f"[TRAINING EXCEPTION] Step {curr_step}, Rank {GLOBAL_RANK}, Error:")
             traceback.print_exc()

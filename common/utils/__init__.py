@@ -45,6 +45,13 @@ __all__ = [
     # misc
     "AutoEncoderParams",
     "tuple_mul",
+    # save helpers
+    "convert_dtype",
+    "dummy_indexes_searchsorted",
+    "get_local_dir",
+    "get_local_path",
+    "save",
+    "set_local_dir",
     # tensor_ops
     "flatten",
     "unflatten",

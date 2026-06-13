@@ -17,7 +17,7 @@ import os
 EXP_HW_20250819 = os.environ.get("EXP_HW_20250819", "False").lower() == "true"
 from einops import rearrange
 import torch
-from typing import List
+from typing import List, Dict, Any
 import imageio
 import glob
 import numpy as np
@@ -83,6 +83,29 @@ def decode_video_tensor(video_tensor, video_type="vae", save_path="", save_half=
             imageio.imwrite(save_path_i, v_thwc_save[0], format="png")
         print(f"video or image saved to {save_path_i}")
     return v_thwc
+
+
+def decode_text_interleave(tokenizer, val_data: Dict[str, Any], sep: int = 2, **decode_kwargs):
+    sample_lens = val_data["sample_lens"]
+    packed_text_indexes = val_data["packed_text_indexes"]
+    packed_text_ids = val_data["packed_text_ids"]
+
+    # 计算每个样本在 packed_text_indexes 中的起始和结束位置
+    end_indices = torch.cumsum(torch.tensor(sample_lens), dim=0)
+    start_indices = torch.cat([torch.tensor([0]), end_indices[:-1]])
+    sample_type = val_data["sample_type"]
+
+    text_gen_lst, text_und_lst = [], []
+    for i_sample in range(len(sample_lens)):
+        if sample_type[i_sample] == "gen":
+            text_mask = (packed_text_indexes >= start_indices[i_sample]) & (packed_text_indexes < end_indices[i_sample])
+            text_gen_lst.append(tokenizer.decode(packed_text_ids[packed_text_indexes[text_mask]], **decode_kwargs))
+
+        elif sample_type[i_sample] == "und":
+            text_mask = (packed_text_indexes >= start_indices[i_sample]) & (packed_text_indexes < end_indices[i_sample])
+            text_und_lst.append(tokenizer.decode(packed_text_ids[packed_text_indexes[text_mask]], **decode_kwargs))
+    return text_gen_lst, text_und_lst
+
 
 
 def map_splits_to_samples(sample_lens: List[int], split_lens: List[int]) -> List[List[int]]:

@@ -30,3 +30,12 @@ dist/
 # custom ignore
 results/
 downloads/
+temps/
+datasets/
+
+# 
+config/train_online
+data/datasets_factory/dataset_x2t_interleave.py
+data/datasets_factory/dataset_x2v_interleave.py
+data/internal_data_utils
+outputs/

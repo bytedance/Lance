@@ -48,7 +48,7 @@ from data.datasets_custom import ValidationDataset
 from config.config_factory import ModelArguments, DataArguments, TrainingArguments, EvaluationArguments, get_model_path
 
 
-def init_from_vlm_if_needed(model: Qwen2ForCausalLM, model_args: ModelArguments, log_rank0):
+def init_from_vlm_checkpoint(model: Qwen2ForCausalLM, model_args: ModelArguments, log_rank0):
     # NOTE: VLM initialization loads through this path.
     def load_safetensors_state_dict(folder_path):
         # Select safetensors files only and sort by filename for deterministic order.

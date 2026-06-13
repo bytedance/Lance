@@ -46,7 +46,7 @@ from data.datasets_custom import ValidationDataset
 from config.config_factory import ModelArguments, DataArguments, TrainingArguments, EvaluationArguments, get_model_path
 
 
-def init_from_vlm_if_needed(model: Qwen2ForCausalLM, model_args: ModelArguments, log_rank0):
+def init_from_vlm_checkpoint(model: Qwen2ForCausalLM, model_args: ModelArguments, log_rank0):
     def load_safetensors_state_dict(folder_path):
         safetensor_files = sorted(
             f for f in os.listdir(folder_path) if f.endswith(".safetensors")

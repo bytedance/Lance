@@ -1,0 +1,150 @@
+D1:
+ x2v_interleave_local:
+  dataset_type: text2image_general
+  raw_bytes_input: true
+  is_image: true
+  target_modality: "image"
+  text_template: true
+  task_type: "t2v"
+  dataset_names:
+    local_100:
+      data_dir:
+        - datasets/text2imgae/local_256.parquet
+  debug_parquet_repeat: 256  # debug option for quick smoke tests on small local datasets
+
+  video_transform_args:
+    resolution: 768
+    mode: "bucket"
+    divisible_crop_size: 16
+    aspect_ratios: ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]
+    mean: 0.5
+    std: 0.5
+
+  is_mandatory: false
+  weight: 1.0
+  caption_key: "caption"
+
+D2:
+ x2v_interleave_local:
+  dataset_type: text2video_general
+  raw_bytes_input: true
+  is_image: false
+  target_modality: "video"
+  text_template: true
+  task_type: ["t2v", "ff2v"]
+  task_type_rate: [0.8, 0.2]
+  debug_parquet_repeat: 256  # debug option for quick smoke tests on small local datasets
+  dataset_names:
+    t2v_local_128:
+      data_dir:
+        - datasets/text2video/local_128.parquet
+
+  video_transform_args:
+    resolution: 640
+    mode: "bucket"
+    divisible_crop_size: 16
+    stride_spatial: 16
+    stride_temporal: 4
+    aspect_ratios: ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]
+    mean: 0.5
+    std: 0.5
+
+  video_frame_sampler_args:
+    type: "multi_clips"
+    res_dump: ["12fps_360p"]
+    params:
+      temporal: 4
+      sample_fps: 12
+      max_duration: 6
+      assert_seconds: false
+      truncate: false
+
+  is_mandatory: false
+  weight: 1
+  caption_key: "caption"
+
+
+D3:
+ x2v_interleave_local:
+  dataset_type: image2image
+  raw_bytes_input: true
+  is_image: true
+  target_modality: "image"
+  task_type: "tv2v"
+  sample_task: "edit"
+  vision_cond_type: ["vit", "vae_Nsplit"]
+  text_template: true
+  dataset_names:
+    i2i_local_256:
+      data_dir:
+        - datasets/image2image/local_256.parquet
+  debug_parquet_repeat: 256  # debug option for quick smoke tests on small local datasets
+
+  video_transform_args:
+    resolution: 768
+    mode: "bucket"
+    divisible_crop_size: 16
+    stride_spatial: 16
+    stride_temporal: 4
+    aspect_ratios: ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]
+    mean: 0.5
+    std: 0.5
+
+  vit_video_transform_args:
+    resolution: 672
+    mode: "bucket"
+    divisible_crop_size: 28
+    aspect_ratios: ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]
+    mean: [0.48145466, 0.4578275, 0.40821073]
+    std: [0.26862954, 0.26130258, 0.27577711]
+
+  is_mandatory: false
+  weight: 1.0
+
+
+D4:
+ x2v_interleave_local:
+  dataset_type: video2video
+  raw_bytes_input: true
+  is_image: false
+  target_modality: "video"
+  task_type: "tv2v"
+  sample_task: "edit"
+  vision_cond_type: ["vit", "vae_Nsplit"]
+  text_template: true
+  dataset_names:
+    v2v_local_64:
+      data_dir:
+        - datasets/video2video/local_64.parquet
+  debug_parquet_repeat: 256  # debug option for quick smoke tests on small local datasets
+
+  video_transform_args:
+    resolution: 640
+    mode: "bucket"
+    divisible_crop_size: 16
+    stride_spatial: 16
+    stride_temporal: 4
+    aspect_ratios: ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]
+    mean: 0.5
+    std: 0.5
+
+  vit_video_transform_args:
+    resolution: 616
+    mode: "bucket"
+    divisible_crop_size: 28
+    aspect_ratios: ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]
+    mean: [0.48145466, 0.4578275, 0.40821073]
+    std: [0.26862954, 0.26130258, 0.27577711]
+
+  video_frame_sampler_args:
+    type: "multi_clips"
+    res_dump: ["image_480p", "12fps_480p"]
+    params:
+      temporal: 4
+      sample_fps: 12
+      max_duration: 6
+      assert_seconds: false
+      truncate: false
+
+  is_mandatory: false
+  weight: 1.0

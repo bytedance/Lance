@@ -2,7 +2,7 @@
 
 ## 1.1 本地数据集 parquet 构建
 
-训练最终读取的是 parquet。下面给出当前本地训练推荐的 parquet 格式。从[Hugging Face](https://huggingface.co/datasets)中下载example dataset并放置在本地`./datasets`下
+训练最终读取的是 parquet。下面给出当前本地训练推荐的 parquet 格式。从[Hugging Face](https://huggingface.co/datasets/bytedance-research/Lance_example_dataset)中下载example dataset并放置在本地`./datasets`下
 
 ### 1.1.1 t2i
 

@@ -29,7 +29,7 @@ def get_download_dir():
     Get a local download directory for storaging download files.
     """
     if DOWNLOAD_DIR is None:
-        return "/home/tiger/.cache/vgfm/downloads/"
+        return osp.join(osp.expanduser("~"), ".cache", "downloads")
     return DOWNLOAD_DIR
 
 

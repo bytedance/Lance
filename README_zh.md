@@ -186,6 +186,12 @@ snapshot_download(cache_dir=cache_dir,
 
 ## 📚 使用方法
 
+### 训练
+
+训练脚本用法见 [train_zh.md](./train_zh.md)。
+
+三个训练脚本默认按单机 8 卡配置（`ARNOLD_WORKER_GPU=8`，`NUM_SHARD=4`）。如果本地或单机环境少于 8 张可见 GPU，启动前需要先在对应的 `scripts/sft_lance_*.sh` 中调整这些值；否则 `accelerate launch --num_processes $TOTAL_RANK` 可能因为进程数/GPU 数不匹配而失败或卡住。
+
 ### 推理
 
 #### 基本用法

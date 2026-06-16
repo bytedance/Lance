@@ -8,6 +8,16 @@
 
 这三个脚本本质上都是通过 `accelerate launch` 启动 `train/unified_train.py`，差异在默认的数据配置和 `VISUAL_GEN` 开关。
 
+注意：三个脚本默认按单机 8 卡配置：
+
+```bash
+ARNOLD_WORKER_NUM=1
+ARNOLD_WORKER_GPU=8
+NUM_SHARD=4
+```
+
+如果你在少于 8 张可见 GPU 的本地或单机环境中训练，不要直接照抄下面的启动命令。先打开对应脚本，把 `ARNOLD_WORKER_GPU` 改成实际 GPU 数；同时把 `NUM_SHARD` 改成不大于 `TOTAL_RANK` 且能整除 `TOTAL_RANK` 的值。否则 `accelerate launch --num_processes $TOTAL_RANK` 会按 8 个进程启动，可能因为进程数/GPU 数不匹配而失败或卡住。
+
 ## 1. 训练脚本选择
 
 这三个脚本最终都会把 shell 变量展开成命令行参数，传给 `train/unified_train.py`。实际使用时，先决定你要跑哪一类任务。

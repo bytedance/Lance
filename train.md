@@ -8,6 +8,16 @@ This document explains the purpose and common usage of the following training sc
 
 All three scripts ultimately launch `train/unified_train.py` via `accelerate launch`. The main differences are the default dataset config and the `VISUAL_GEN` switch.
 
+Important: the default scripts are configured for one 8-GPU machine:
+
+```bash
+ARNOLD_WORKER_NUM=1
+ARNOLD_WORKER_GPU=8
+NUM_SHARD=4
+```
+
+If you run on a local or single-machine environment with fewer than 8 visible GPUs, do not directly copy the launch commands below. First edit the selected script and set `ARNOLD_WORKER_GPU` to your actual GPU count. Also set `NUM_SHARD` to a value that is no larger than `TOTAL_RANK` and can divide `TOTAL_RANK`; otherwise `accelerate launch --num_processes $TOTAL_RANK` may wait for unavailable processes or fail during distributed initialization.
+
 
 ## 1. Training Script Selection
 

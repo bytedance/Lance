@@ -187,6 +187,12 @@ snapshot_download(cache_dir=cache_dir,
 
 ## 📚 Usage
 
+### Training
+
+For training script usage, see [train.md](./train.md).
+
+The default training scripts are configured for one 8-GPU machine (`ARNOLD_WORKER_GPU=8`, `NUM_SHARD=4`). If your local or single-machine environment has fewer than 8 visible GPUs, adjust these values in the selected `scripts/sft_lance_*.sh` before launching; otherwise `accelerate launch --num_processes $TOTAL_RANK` may fail or wait for unavailable processes.
+
 ### Inference
 
 #### Basic Usage

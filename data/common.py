@@ -79,10 +79,10 @@ def shift_position_ids(
 
 def detect_lang_simple(s: str) -> str:
     """
-    快速判断：若含中文返回 'zh'，否则若含英文字母返回 'en'，否则 'other'。
-    适用于快速路由（注意：含两者时返回 'zh'，可按需调整）。
+    Fast heuristic: return 'zh' if Chinese is present, 'en' if English letters are present, otherwise 'other'.
+    Useful for quick routing. If both are present, this returns 'zh'; adjust if needed.
     """
-    # 先移除数字再作判断
+    # Remove digits before detection
     s_without_digits = re.sub(r'\d+', '', s)
 
     if RE_ZH.search(s_without_digits):
@@ -93,27 +93,27 @@ def detect_lang_simple(s: str) -> str:
 
 def map_to_nearest_aspect_ratio(h, w, target_resolution=256):
     """
-    将h和w映射到最接近的预设宽高比，返回调整后的h和w，且保持分辨率在目标值左右
+    Map h and w to the closest preset aspect ratio and return adjusted h and w near the target resolution.
 
-    预设比例: ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]
-    target_resolution: 目标分辨率基准值（默认256）
+    Preset ratios: ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"].
+    target_resolution: Base target resolution, default 256.
     """
-    # 预计算所有预设宽高比的浮点值 (宽度/高度)
+    # Precompute all preset aspect ratios as width / height
     PRESET_RATIOS = [21 / 9, 16 / 9, 4 / 3, 1 / 1, 3 / 4, 9 / 16]
 
-    # 计算原始宽高比
+    # Compute the original aspect ratio
     original_ratio = w / h
 
-    # 找到最接近的预设比例
+    # Find the closest preset ratio
     min_index = min(range(len(PRESET_RATIOS)), key=lambda i: abs(original_ratio - PRESET_RATIOS[i]))
     best_ratio = PRESET_RATIOS[min_index]
 
-    # 计算缩放因子，使较长边接近目标分辨率
-    if best_ratio >= 1:  # 宽屏 (宽度 >= 高度)
+    # Compute scale so the longer side is close to the target resolution
+    if best_ratio >= 1:  # Landscape: width >= height
         scale = target_resolution / best_ratio
         adjusted_w = round(target_resolution)
         adjusted_h = round(scale)
-    else:  # 竖屏 (高度 > 宽度)
+    else:  # Portrait: height > width
         scale = target_resolution
         adjusted_h = round(target_resolution)
         adjusted_w = round(scale * best_ratio)
@@ -123,11 +123,11 @@ def map_to_nearest_aspect_ratio(h, w, target_resolution=256):
 
 def concat_resize_tensor_list(video_latents: List[torch.Tensor], dim: int = 0, is_offline: bool = False, max_num_frames: int = 121) -> torch.Tensor:
     """
-    把 tensors 列表在轴 dim 上 concat；将size不同的tensor的H/W resize到与target 相同。
-    - tensors: 非空 list，所有 tensor 的 ndim 必须相同
-    - dim: concat 轴（支持负值）
-    - pad_value: 填充值（默认 0.0）
-    返回：拼接后的 tensor
+    Concatenate tensors along dim; resize H/W of tensors with different sizes to match target.
+    - tensors: Non-empty list; all tensors must have the same ndim.
+    - dim: Concatenation axis; negative values are supported.
+    - pad_value: Padding value, default 0.0.
+    Returns: Concatenated tensor.
     """
 
     if is_offline:
@@ -140,7 +140,7 @@ def concat_resize_tensor_list(video_latents: List[torch.Tensor], dim: int = 0, i
 
     num_frames_all = num_frames_target
     for index, video_latent in enumerate(video_latents):
-        if index != len(video_latents) - 1 and num_frames_all + video_latent.shape[dim] > max_num_frames:  # 避免产生超过MAX_NUM_FRAMES的视频
+        if index != len(video_latents) - 1 and num_frames_all + video_latent.shape[dim] > max_num_frames:  # Avoid producing videos longer than MAX_NUM_FRAMES
             continue
         num_frames_all += video_latent.shape[dim]
         if is_offline:
@@ -163,11 +163,11 @@ def concat_resize_tensor_list(video_latents: List[torch.Tensor], dim: int = 0, i
 
 def concat_pad_tensor_list(video_latents: List[torch.Tensor], dim: int = 0, pad_value: float = 0.0, max_num_frames: int = 121) -> torch.Tensor:
     """
-    把 tensors 列表在轴 dim 上 concat；对其它轴按该轴的最大长度用 pad_value 填充。
-    - tensors: 非空 list，所有 tensor 的 ndim 必须相同
-    - dim: concat 轴（支持负值）
-    - pad_value: 填充值（默认 0.0）
-    返回：拼接后的 tensor
+    Concatenate tensors along dim; pad other axes to the maximum length on each axis with pad_value.
+    - tensors: Non-empty list; all tensors must have the same ndim.
+    - dim: Concatenation axis; negative values are supported.
+    - pad_value: Padding value, default 0.0.
+    Returns: Concatenated tensor.
     """
     video_sizes = [item.shape for item in video_latents]
     max_video_size = [max(item) for item in list(zip(*video_sizes))]
@@ -176,7 +176,7 @@ def concat_pad_tensor_list(video_latents: List[torch.Tensor], dim: int = 0, pad_
 
     num_frames_all = num_frames_target
     for index, video_latent in enumerate(video_latents):
-        if index != len(video_latents) - 1 and num_frames_all + video_latent.shape[dim] > max_num_frames:  # 避免产生超过MAX_NUM_FRAMES的视频
+        if index != len(video_latents) - 1 and num_frames_all + video_latent.shape[dim] > max_num_frames:  # Avoid producing videos longer than MAX_NUM_FRAMES
             continue
         num_frames_all += video_latent.shape[dim]
         max_video_size[dim] = video_latent.shape[dim]
@@ -198,13 +198,13 @@ def parse_videochat2it_doubao_caption(row):
         IQA_q = rewrite_VQA['question'] if 'question' in rewrite_VQA.keys() else rewrite_VQA['Question']
         IQA_a = rewrite_VQA['final_answer']
         IQA_resoning = rewrite_VQA['reasoning']
-        # 把 resoning 和 final_answer 组合作为 最终answer
+        # Combine reasoning and final_answer as the final answer
 
-        # if random.random() < 0.5: # 50% 的概率，加入 reasoning process
+        # if random.random() < 0.5: # 50% chance to include the reasoning process
         #     IQA_a = IQA_a + '\n' + IQA_resoning
         #     IQA_i = IQA_i + ' Please provide the reasoning process for selecting the correct answer.'
 
-        if 'options' not in IQA_q and 'Options' not in IQA_q: # 即question 中不含选项时
+        if 'options' not in IQA_q and 'Options' not in IQA_q: # When the question does not contain options
             try:
                 options = rewrite_VQA['options']
             except:
@@ -217,7 +217,7 @@ def parse_videochat2it_doubao_caption(row):
                 options_str  = [key + ' ' + value if value not in key else key for key,value in options.items()]
                 options = '\n'.join(options_str)
 
-            IQA_q = IQA_q + '\nOptions:\n' + options # 将选项加入到question 中
+            IQA_q = IQA_q + '\nOptions:\n' + options # Add options to the question
         return [IQA_i, IQA_q, IQA_a]
     except:
         if 'rewrite_VQA' in row.keys():

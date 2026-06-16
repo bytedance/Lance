@@ -20,7 +20,7 @@ class DistributedIterableDataset(torch.utils.data.IterableDataset):
         raise NotImplementedError
 
     def set_epoch(self, seed=42):
-        # 进程的粒度（for each rank）
+        # Process granularity: one shard per rank
         if self.data_paths is None:
             return
 
@@ -40,14 +40,14 @@ class DistributedIterableDataset(torch.utils.data.IterableDataset):
         self.num_files_per_rank = num_files_per_rank
         self.data_paths_per_rank = data_paths[local_start:local_end]
 
-        # ================== 添加这行打印日志 ==================
-        if self.data_paths_per_rank and self.local_rank == 0: # 确保列表不为空, 只打印rank0
+        # ================== Add this log line ==================
+        if self.data_paths_per_rank and self.local_rank == 0: # Ensure the list is non-empty and log only on rank 0
             logger.info(f"[Rank-Split-Check] Rank {self.local_rank} got {len(self.data_paths_per_rank)} files. "
                 f"First file: {os.path.basename(self.data_paths_per_rank[0])}")
         # =======================================================
 
     def get_data_paths_per_worker(self):
-        # 线程的粒度（for each process）
+        # Worker granularity: one shard per worker process
         if self.data_paths is None:
             return None
 
@@ -62,7 +62,7 @@ class DistributedIterableDataset(torch.utils.data.IterableDataset):
         end = num_files_per_worker * (worker_id + 1)
         data_paths_per_worker = self.data_paths_per_rank[start:end]
 
-        # NOTE: 这里的逆序 ::-1 应该没有必要
+        # NOTE: The reverse order ::-1 is probably unnecessary
         return data_paths_per_worker, worker_id
 
     def __iter__(self):

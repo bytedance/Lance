@@ -97,7 +97,7 @@ def main():
     training_args.incre_time_pro = data_args.incre_time_pro
 
     logger = get_logger()
-    log_rank0 = (lambda msg: logger.info(msg)) if GLOBAL_RANK == 0 else (lambda *_: None)  # 只在rank0打印
+    log_rank0 = (lambda msg: logger.info(msg)) if GLOBAL_RANK == 0 else (lambda *_: None)  # Log only on rank 0
 
     setup_output_paths(training_args, logger, GLOBAL_RANK)
     setup_rank0_logging_and_wandb(model_args, data_args, training_args, logger, GLOBAL_RANK)
@@ -114,7 +114,7 @@ def main():
 
     llm_config, language_model, vit_config, vit_model, vae_model, vae_config = setup_model_components(model_args, training_args, log_rank0)
 
-    # Lance的配置
+    # Lance configuration
     config = LanceConfig(
         visual_gen=training_args.visual_gen,
         visual_und=training_args.visual_und,
@@ -173,7 +173,7 @@ def main():
     apply_activation_checkpointing(
         fsdp_model,
         checkpoint_wrapper_fn=functools.partial(checkpoint_wrapper, checkpoint_impl=CheckpointImpl.NO_REENTRANT),
-        check_fn=grad_checkpoint_check_fn,  # grad_checkpoint_check_fn 是自定义的检查函数，告诉 apply_activation_checkpointing 应该对哪些层或模块开启激活检查点
+        check_fn=grad_checkpoint_check_fn,  # Custom check function that selects which modules use activation checkpointing
     )
 
     save_trainable_parameters(model, fsdp_model, training_args, logger, GLOBAL_RANK)
@@ -181,7 +181,7 @@ def main():
     # ========================= Optimizer and scheduler setup ==============================
     params_to_train = [p for p in fsdp_model.parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(
-        params_to_train,  # <<< 关键：必须是过滤后的列表 能否显著减少训练参数？
+        params_to_train,  # Use only parameters that require gradients
         lr=training_args.lr,
         betas=(training_args.beta1, training_args.beta2),
         eps=training_args.eps,
@@ -238,8 +238,8 @@ def main():
         collate_fn=simple_custom_collate,
         drop_last=True,
         prefetch_factor=data_args.prefetch_factor if data_args.num_workers > 0 else None,
-        persistent_workers=True if data_args.num_workers > 0 else False,       # True的话避免跨 epoch 持有句柄
-        multiprocessing_context=ctx,    # 关键：spawn 取代 fork
+        persistent_workers=True if data_args.num_workers > 0 else False,       # Avoid keeping stale handles across epochs when enabled
+        multiprocessing_context=ctx,    # Use spawn instead of fork
     )
 
 
@@ -358,14 +358,14 @@ def main():
         except Exception:
             logger.error(f"[TRAINING EXCEPTION] Step {curr_step}, Rank {GLOBAL_RANK}, Error:")
             traceback.print_exc()
-            # 清空梯度，避免脏数据影响下一轮
+            # Clear gradients so stale data does not affect the next iteration
             optimizer.zero_grad()
-            # 分布式多卡同步，确保所有卡一起跳过
+            # Synchronize all distributed ranks before skipping together
             try:
                 dist.barrier()
             except:
                 pass
-            # 跳过当前批次，继续训练
+            # Skip the current batch and continue training
             continue
 
     if GLOBAL_RANK == 0:

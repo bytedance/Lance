@@ -25,8 +25,8 @@ import numpy as np
 
 def _vit_denorm_uint8_thwc(video_tensor_c_first: torch.Tensor) -> np.ndarray:
     """
-    输入: T C H W float，范围近似标准化(mean/std)。输出: T H W C uint8
-    固定用 Qwen2.5-VL vit 的 mean/std，保持与原实现一致。
+    Input: T C H W float, approximately normalized by mean/std. Output: T H W C uint8.
+    Use the Qwen2.5-VL VIT mean/std to stay consistent with the original implementation.
     """
     mean = [0.48145466, 0.4578275, 0.40821073]
     std = [0.26862954, 0.26130258, 0.27577711]
@@ -90,7 +90,7 @@ def decode_text_interleave(tokenizer, val_data: Dict[str, Any], sep: int = 2, **
     packed_text_indexes = val_data["packed_text_indexes"]
     packed_text_ids = val_data["packed_text_ids"]
 
-    # 计算每个样本在 packed_text_indexes 中的起始和结束位置
+    # Compute each sample's start and end positions in packed_text_indexes
     end_indices = torch.cumsum(torch.tensor(sample_lens), dim=0)
     start_indices = torch.cat([torch.tensor([0]), end_indices[:-1]])
     sample_type = val_data["sample_type"]
@@ -110,14 +110,14 @@ def decode_text_interleave(tokenizer, val_data: Dict[str, Any], sep: int = 2, **
 
 def map_splits_to_samples(sample_lens: List[int], split_lens: List[int]) -> List[List[int]]:
     """
-    将split索引映射到对应的样本
+    Map split indexes to their corresponding samples.
 
-    参数:
-        val_sample_lens: 每个样本的总长度列表
-        val_split_lens: 每个split的长度列表
+    Args:
+        val_sample_lens: List of total lengths for each sample.
+        val_split_lens: List of lengths for each split.
 
-    返回:
-        列表，其中每个元素是一个列表，包含属于对应样本的split索引
+    Returns:
+        A list where each element contains split indexes for the corresponding sample.
     """
     sample_splits = []
     current_split_idx = 0

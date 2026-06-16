@@ -109,7 +109,7 @@ def init_from_model_path_if_needed(model: Qwen2ForCausalLM, model_args: ModelArg
 
 
 def clean_memory(*objects):
-    """清理内存并释放 GPU 缓存"""
+    """Clear memory and release the GPU cache."""
     for obj in objects:
         del obj
     import gc
@@ -120,7 +120,7 @@ def clean_memory(*objects):
 
 def decode_video_tensor_for_dpg(v_list):
     """
-    专门为 DPG 解码视频张量，保持原有的保存格式
+    Decode video tensors for DPG while preserving the original save format.
     """
     N_target = len(v_list)
     if N_target != 1:
@@ -171,7 +171,7 @@ def validate_on_fixed_batch(
     sample_num_per_prompt: int = 1,
 ):
     """
-    验证逻辑，保持与原文件相同的保存格式
+    Validation logic that preserves the same save format as the original file.
     """
     # Check whether distributed execution has been initialized.
     if dist.is_initialized():
@@ -254,7 +254,7 @@ def validate_on_fixed_batch(
                 if v_thwc.shape[0] == 1:
                     tensor_list_for_grid.append(v_thwc.squeeze(0).cpu())
                 else:
-                    raise NotImplementedError("需要保存图像")
+                    raise NotImplementedError("Image saving is required")
 
     # Keep the original save format.
     grid_tensor = make_grid(tensor_list_for_grid, nrow=int(np.sqrt(sample_num_per_prompt)), padding=0, pad_value=255)
@@ -386,7 +386,7 @@ def main():
         model_args.tie_word_embeddings = False
         llm_config.tie_word_embeddings = False
     else:
-        assert model.language_model.get_input_embeddings().weight.data.data_ptr() != model.language_model.get_output_embeddings().weight.data.data_ptr(), 'tie_world_embeddings 冲突'
+        assert model.language_model.get_input_embeddings().weight.data.data_ptr() != model.language_model.get_output_embeddings().weight.data.data_ptr(), 'tie_word_embeddings conflict'
 
     model = model.to(device=DEVICE, dtype=torch.bfloat16)
     model.eval()

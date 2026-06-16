@@ -9,7 +9,91 @@ This document explains the purpose and common usage of the following training sc
 All three scripts ultimately launch `train/unified_train.py` via `accelerate launch`. The main differences are the default dataset config and the `VISUAL_GEN` switch.
 
 
-## 1. Training Script Selection
+## 1. Environment Setup
+
+The training release adds extra dependencies on top of the inference-only setup. If you installed the environment before the fine-tuning code was released, reinstall the dependencies from the updated `requirements.txt`:
+
+```bash
+pip install -r requirements.txt
+```
+
+
+## 2. Data Preparation
+
+Training reads local parquet files. Download example datasets from [Hugging Face](https://huggingface.co/datasets/bytedance-research/Lance_example_dataset) and place them under local `./datasets`.
+
+Expected local layout:
+
+```text
+datasets/
+├── image2image/
+├── image2text/
+├── text2image/
+├── text2video/
+├── video2text/
+└── video2video/
+```
+
+The ready-to-use local configs live in `config/train_local/`, for example:
+
+| Task | Config |
+| --- | --- |
+| `t2i` | `config/train_local/t2i_local.yaml` |
+| `t2v` | `config/train_local/t2v_local.yaml` |
+| `i2i` | `config/train_local/i2i_local.yaml` |
+| `v2v` | `config/train_local/v2v_local.yaml` |
+| `i2t` | `config/train_local/i2t_local.yaml` |
+| `v2t` | `config/train_local/v2t_local.yaml` |
+
+For parquet schemas, supported task types, and custom dataset construction, see [train_dataset.md](train_dataset.md).
+
+## 3. Launch Patterns
+
+After preparing the environment, model weights, and example datasets, launch one of the training scripts below.
+
+By default, the scripts use all GPUs visible to `nvidia-smi` on the current machine. To run on fewer GPUs, set `ARNOLD_WORKER_GPU` before launching, for example `ARNOLD_WORKER_GPU=1 bash scripts/sft_lance_unified.sh`.
+For smaller local machines, you can also lower dataloader workers, for example `NUM_WORKERS=2 ARNOLD_WORKER_GPU=1 bash scripts/sft_lance_unified.sh`.
+
+### 3.1 Unified mixed training
+
+```bash
+bash scripts/sft_lance_unified.sh
+```
+
+### 3.2 Generation-task training
+
+```bash
+bash scripts/sft_lance_generation.sh
+```
+
+For a local `t2v` run, override the dataset config and experiment name:
+
+```bash
+DATASET_CONFIG_FILE=config/train_local/t2v_local.yaml \
+VAL_DATASET_CONFIG_FILE=config/train_local/t2v_local.yaml \
+WANDB_NAME=t2v_local_debug \
+bash scripts/sft_lance_generation.sh
+```
+
+### 3.3 Understanding-task training
+
+```bash
+bash scripts/sft_lance_understand.sh
+```
+
+For a local `v2t` run, override the dataset config and experiment name:
+
+```bash
+DATASET_CONFIG_FILE=config/train_local/v2t_local.yaml \
+VAL_DATASET_CONFIG_FILE=config/train_local/v2t_local.yaml \
+WANDB_NAME=v2t_local_debug \
+bash scripts/sft_lance_understand.sh
+```
+
+**NOTE**: The scripts default to `MODEL_PATH=./downloads/Lance_3B_Video`, the unified video-capable checkpoint. For image-only fine-tuning, such as `t2i`, `i2i`, or `i2t`, you can switch `MODEL_PATH` to `./downloads/Lance_3B` before launch.
+
+
+## 4. Training Script Selection
 
 These scripts expand shell variables into command-line arguments and pass them to `train/unified_train.py`. In practice, you should first decide which class of task you want to train.
 
@@ -20,7 +104,7 @@ These scripts expand shell variables into command-line arguments and pass them t
 | `scripts/sft_lance_understand.sh` | `config/train_local/multi_und.yaml` | `VISUAL_UND=True`, `VISUAL_GEN=False` | Understanding tasks such as `i2t`, `v2t` | `DATASET_CONFIG_FILE`, `VAL_DATASET_CONFIG_FILE`, `WANDB_NAME` |
 
 
-## 2. Key Parameters to Modify First
+## 5. Key Parameters to Modify First
 
 These are the parameters you should verify before most runs. Think of them as the first layer of knobs that usually need to be changed.
 
@@ -38,9 +122,9 @@ These are the parameters you should verify before most runs. Think of them as th
 | `NUM_REPLICATE` | Number of replicas | Usually changes with `NUM_SHARD` | Computed as `TOTAL_RANK / NUM_SHARD` |
 
 
-## 3. Two Switches That Are Easy to Misconfigure
+## 6. Two Switches That Are Easy to Misconfigure
 
-### 3.1 `VISUAL_GEN`
+### 6.1 `VISUAL_GEN`
 
 `VISUAL_GEN` controls whether the visual generation branch is enabled, including the VAE latent / flow matching / MSE path.
 
@@ -54,7 +138,7 @@ These are the parameters you should verify before most runs. Think of them as th
 
 If you accidentally set `VISUAL_GEN=True` for an understanding task, but the batch does not contain the latent fields required by the generation branch, `Lance.forward(...)` may enter the wrong branch and fail.
 
-### 3.2 `VALIDATION_STEP`
+### 6.2 `VALIDATION_STEP`
 
 All three scripts default to:
 
@@ -70,34 +154,7 @@ This means:
 The validation logic in the training script has not been fully checked yet. Enabling validation with a positive value is currently not supported, so do not set values such as `VALIDATION_STEP=100`; keep it as `-1`.
 
 
-## 4. Common Launch Patterns
-
-### 4.1 Unified mixed training
-
-```bash
-bash scripts/sft_lance_unified.sh
-```
-
-### 4.2 Local `v2t` understanding training
-
-```bash
-DATASET_CONFIG_FILE=config/train_local/v2t_local.yaml \
-VAL_DATASET_CONFIG_FILE=config/train_local/v2t_local.yaml \
-WANDB_NAME=v2t_local_debug \
-bash scripts/sft_lance_understand.sh
-```
-
-### 4.3 Local `t2v` generation training
-
-```bash
-DATASET_CONFIG_FILE=config/train_local/t2v_local.yaml \
-VAL_DATASET_CONFIG_FILE=config/train_local/t2v_local.yaml \
-WANDB_NAME=t2v_local_debug \
-bash scripts/sft_lance_generation.sh
-```
-
-
-## 5. Practical Recommendations
+## 7. Practical Recommendations
 
 1. Use `sft_lance_understand.sh` first for pure understanding tasks.
 2. Use `sft_lance_generation.sh` first for pure generation tasks.

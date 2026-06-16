@@ -616,7 +616,7 @@ def prepare_checkpoint_loader(
             assert (
                 model.language_model.get_input_embeddings().weight.data.data_ptr()
                 != model.language_model.get_output_embeddings().weight.data.data_ptr()
-            ), "tie_world_embeddings 冲突"
+            ), "tie_word_embeddings conflict"
 
         freeze_model_components(model, training_args, log_rank0)
 
@@ -682,7 +682,7 @@ def _log_media_across_ranks(local_media_data, tag, step, fps, logger=None):
     if flat is None:
         return
     all_media = []
-    for i, item in enumerate(flat):  # TODO: 支持序列级的视频显示
+    for i, item in enumerate(flat):  # TODO: support sequence-level video display
         if item.get("validation_log_type", "") == "table":
             if i == 0:
                 all_media = wandb.Table(columns=["id", "condition_image", "condition_text", "target_text", "target_image", "condition_video", "target_video"])
@@ -745,9 +745,9 @@ def _log_media_across_ranks(local_media_data, tag, step, fps, logger=None):
 # =============================================================================
 
 def init_from_vlm_checkpoint(model: Qwen2ForCausalLM, model_args: ModelArguments, log_rank0, report_dir: Optional[str] = None, report_name: str = "vlm_checkpoint_load_report.txt"):
-    # NOTE: 初始化加载VLM模型走这里
+    # NOTE: VLM checkpoint initialization goes through this path
     def load_safetensors_state_dict(folder_path):
-        # 只选取safetensors文件，按文件名排序保证顺序
+        # Select only safetensors files and sort by filename for deterministic order
         safetensor_files = sorted(
             f for f in os.listdir(folder_path) if f.endswith(".safetensors")
         )
@@ -759,20 +759,20 @@ def init_from_vlm_checkpoint(model: Qwen2ForCausalLM, model_args: ModelArguments
 
     state_dict = load_safetensors_state_dict(model_args.llm_path)
 
-    # 参数名的更改以适配当前 Lance 模型的参数名
+    # Rename parameters to match the current Lance model names
     for k in list(state_dict.keys()):
         if "visual" in k:  # ViT and connector
             state_dict[k.replace("visual", "vit_model")] = state_dict.pop(k)
         else:
-            # 添加language_model前缀
+            # Add the language_model prefix
             state_dict["language_model." + k] = state_dict.pop(k)
 
     result = model.load_state_dict(state_dict, strict=False)
     missing = result.missing_keys
     unexpected = result.unexpected_keys
-    # 匹配的参数数量
+    # Number of matched parameters
     matched = len(state_dict) - len(unexpected)
-    # 未匹配的参数数量
+    # Number of unmatched parameters
     not_matched = len(missing) + len(unexpected)
 
     save_checkpoint_load_report(
@@ -792,7 +792,7 @@ def init_from_vlm_checkpoint(model: Qwen2ForCausalLM, model_args: ModelArguments
 
 
 def load_from_lance_checkpoint(model: Qwen2ForCausalLM, model_args: ModelArguments, log_rank0, ema=False, report_dir: Optional[str] = None):
-    # NOTE: 微调模型走这里 优先级更高; 加载模型优先加载 ema.safetensors 其次才是 model.safetensors
+    # NOTE: Fine-tuning from a Lance checkpoint goes through this higher-priority path; prefer ema.safetensors, then model.safetensors
     path_dir = model_args.model_path
     ema_path = os.path.join(path_dir, "ema.safetensors")
     model_path = os.path.join(path_dir, "model.safetensors")
@@ -818,13 +818,13 @@ def load_from_lance_checkpoint(model: Qwen2ForCausalLM, model_args: ModelArgumen
     if 'latent_pos_embed.pos_embed' in model_state_dict:
         model_state_dict.pop('latent_pos_embed.pos_embed')
         log_rank0(f"Pop `latent_pos_embed.pos_embed` from hf model")
-    # model_state_dict.pop('vit_pos_embed.pos_embed')  # TODO: check vit_pos_embed.pos_embed 是否在里面
+    # model_state_dict.pop('vit_pos_embed.pos_embed')  # TODO: check whether vit_pos_embed.pos_embed is present
 
     msg = model.load_state_dict(model_state_dict, strict=False)  # strict = True | False
     missing = msg.missing_keys
     unexpected = msg.unexpected_keys
-    matched = len(model_state_dict) - len(unexpected)  # 匹配的参数数量
-    not_matched = len(missing) + len(unexpected)  # 未匹配的参数数量
+    matched = len(model_state_dict) - len(unexpected)  # Number of matched parameters
+    not_matched = len(missing) + len(unexpected)  # Number of unmatched parameters
     report_name = f"lance_checkpoint_load_report_{'ema' if ema else 'model'}.txt"
     save_checkpoint_load_report(
         report_dir=report_dir,
@@ -875,7 +875,7 @@ def save_training_config(model_args: ModelArguments, data_args: DataArguments, t
 # =============================================================================
 
 def _get_data_mode(val_data: dict) -> str:
-    # 优先从 val_data 读取；若无，则根据键猜测（尽量不动原数据）
+    # Prefer val_data; if missing, infer from keys without mutating the original data where possible
     if "data_mode" in val_data:
         return val_data["data_mode"]
     return "offline" if "padded_latent" in val_data else "online"
@@ -893,9 +893,9 @@ def get_fixed_validation_data(
     DEVICE: int,
     log_rank0,
 ):
-    """构造并返回一个固定的 validation 批次（与现有内联实现等价）。"""
+    """Build and return a fixed validation batch equivalent to the existing inline implementation."""
     assert data_args.val_dataset_config_file is not None and os.path.exists(data_args.val_dataset_config_file)
-    # 1) 加载独立的 val dataset 配置，并覆盖 dropout
+    # 1) Load the independent validation dataset config and override dropout
     val_dataset_config = DataConfig.from_yaml(data_args.val_dataset_config_file)
     val_dataset_config.text_cond_dropout_prob = model_args.val_text_cond_dropout_prob
     val_dataset_config.vae_cond_dropout_prob = model_args.val_vae_cond_dropout_prob
@@ -913,7 +913,7 @@ def get_fixed_validation_data(
     val_data_args.num_workers = min(val_data_args.num_workers, 1)
     try:
         log_rank0("Fetching a fixed batch for validation...")
-        # 2) Dataset（参数与原实现保持一致）
+        # 2) Dataset: keep arguments consistent with the original implementation
         val_dataset = PackedDataset(
             val_dataset_config,
             tokenizer=tokenizer,
@@ -927,10 +927,10 @@ def get_fixed_validation_data(
             image_token_id=image_token_id,
             **asdict(val_data_args),
         )
-        # 固定顺序/seed
+        # Fix order and seed
         val_dataset.set_epoch(training_args.validation_data_seed)
 
-        # 3) DataLoader（参数与原实现保持一致）
+        # 3) DataLoader: keep arguments consistent with the original implementation
         val_num_workers = 0
         ctx = torch.multiprocessing.get_context("spawn") if val_num_workers > 0 else None
         val_loader = DataLoader(
@@ -938,14 +938,14 @@ def get_fixed_validation_data(
             batch_size=1,
             num_workers=val_num_workers,
             pin_memory=True,
-            collate_fn=simple_custom_collate,     # 顶层函数
+            collate_fn=simple_custom_collate,     # Top-level function
             drop_last=True,
             prefetch_factor=1 if val_num_workers > 0 else None,
             persistent_workers=True if val_num_workers > 0 else False,
             multiprocessing_context=ctx,
         )
 
-        # 4) 取一个固定 batch 并转为 dict
+        # 4) Fetch one fixed batch and convert it to a dict
         val_data_cpu = next(iter(val_loader))
         # val_data_cpu = val_data_cpu.cuda(DEVICE).to_dict()
         log_rank0("Fixed validation batch fetched, val_loader and val_dataset deleted.")
@@ -974,7 +974,7 @@ def validate_on_fixed_batch(
     device: int,
 ):
     """
-    抽取的验证逻辑。等价于原来 for-loop 里的整块 validation。
+    Extracted validation logic equivalent to the original validation block in the for-loop.
     """
     log_rank0 = (lambda msg: logger.info(msg)) if get_global_rank() == 0 else (lambda *_: None)
     val_data = val_data_cpu.cuda(device).to_dict()
@@ -984,8 +984,8 @@ def validate_on_fixed_batch(
         with torch.no_grad(), torch.amp.autocast("cuda", enabled=True, dtype=torch.bfloat16):
             log_rank0(f"Running validation on fixed batch at step {curr_step}...")
 
-            # 解析文本（保持与原逻辑一致）
-            # 如果 val dataset 在构造时没有套模板/pos_emb，这里 decode_text_* 会按开关再处理一遍
+            # Decode text, matching the original logic
+            # If the validation dataset did not apply template/pos_emb during construction, decode_text_* handles it according to the switches here
             val_texts_gen, val_texts_und = decode_text_interleave(
                 tokenizer,
                 val_data,
@@ -996,18 +996,18 @@ def validate_on_fixed_batch(
             val_sample_N_target = val_data["sample_N_target"]
             val_sample_type = val_data["sample_type"]
 
-            # -------------------- GEN 分支 --------------------
+            # -------------------- GEN branch --------------------
             if training_args.validation_type.lower() in ("gen", "und_gen", "gen_und") and len(val_texts_gen) > 0:
-                data_mode = _get_data_mode(val_data)  # fix: 不再只在 step==0 时定义
+                data_mode = _get_data_mode(val_data)  # fix: no longer define only at step == 0
 
-                # 计算 video_sizes（不改变原推理配置）
+                # Compute video_sizes without changing the original inference config
                 if data_mode == "offline":
                     if curr_step == 0:
-                        # 第0步要打 GT，所以一次性 decode
+                        # Decode all at step 0 because GT is logged
                         val_padded_videos = vae_model.vae_decode(list(val_data["padded_latent"]))
                         first_shape = val_padded_videos[0].shape[1:]  # T,H,W
                     else:
-                        # 后续仅取一个样本获取尺寸，避免每次都全量解码，减少额外开销
+                        # Later steps decode one sample only to get size and avoid extra full decodes
                         first_shape = vae_model.vae_decode([val_data["padded_latent"][0]])[0].shape[1:]
                     video_sizes = [first_shape for _ in (val_data["padded_latent"])]
                 else:
@@ -1015,15 +1015,15 @@ def validate_on_fixed_batch(
                     if curr_step == 0:
                         val_padded_videos = val_data["padded_videos"]
 
-                # 第 0 步记录 GT
+                # Log GT at step 0
                 if curr_step == 0:
                     if model_args.val_text_cond_dropout_prob > 0:
                         val_texts_gen = ["NULL"] * len(video_sizes)
                     local_gt_media_data = []
                     curr_sample, curr_video_tensor_index, curr_video_tensor_index_vit = 0, 0, 0
-                    for i_gt, N_target in enumerate(val_sample_N_target[:-1]):  # 去除最后pad样本
+                    for i_gt, N_target in enumerate(val_sample_N_target[:-1]):  # Remove the final padding sample
                         left, right = sample_splits[i_gt][0], sample_splits[i_gt][-1] + 1
-                        N_target_VIT = val_attn_modes[left:right].count("full")  # 仅在ti2i 中不为0
+                        N_target_VIT = val_attn_modes[left:right].count("full")  # Non-zero only in ti2i
 
                         if val_sample_type[i_gt] != "gen":
                             curr_video_tensor_index_vit += N_target_VIT
@@ -1032,12 +1032,12 @@ def validate_on_fixed_batch(
                         if curr_sample > training_args.validation_max_samples:
                             break
 
-                        video_tensor = val_padded_videos[curr_video_tensor_index : curr_video_tensor_index + N_target]  # [N], 每一项为[C T H W]
+                        video_tensor = val_padded_videos[curr_video_tensor_index : curr_video_tensor_index + N_target]  # [N], each item is [C T H W]
                         curr_video_tensor_index += N_target
                         v_thwc = decode_video_tensor(video_tensor)
                         is_image = v_thwc.shape[0] == 1
 
-                        # ===== 对GEN 分支 VIT 条件特征的处理 =====
+                        # ===== Handle VIT condition features for the GEN branch =====
                         if N_target_VIT > 0:
                             video_tensor_vit = val_data["padded_videos_vit"][curr_video_tensor_index_vit : curr_video_tensor_index_vit + N_target_VIT]
                             curr_video_tensor_index_vit += N_target_VIT
@@ -1055,10 +1055,10 @@ def validate_on_fixed_batch(
                     _log_media_across_ranks(local_gt_media_data, "validation_gt_samples_gen", curr_step, training_args.validation_video_saving_fps, logger)
 
 
-                # 计算 padded_latent
+                # Compute padded_latent
                 val_data["padded_latent"] = make_padded_latent(val_data['padded_videos'], val_data['vae_data_mode'], vae_model)
 
-                # 采样生成（保持原参数）
+                # Sample generation while preserving original arguments
                 with fsdp_model.summon_full_params(fsdp_model, writeback=False, rank0_only=False):
                     denoise_latent = fsdp_model.validation_gen(
                         val_packed_text_ids=val_data["packed_text_ids"],
@@ -1095,7 +1095,7 @@ def validate_on_fixed_batch(
                         cfg_type=training_args.cfg_type,
                         cfg_uncond_token_id=training_args.cfg_uncond_token_id,
                     )
-                # 解码 + 日志
+                # Decode and log
                 local_media_data = []
                 for i_val, latent in enumerate(denoise_latent):
                     v_list = []
@@ -1117,13 +1117,13 @@ def validate_on_fixed_batch(
                 log_rank0(f"cfg type is: {training_args.cfg_type}.")
 
 
-            # -------------------- UND 分支 --------------------
+            # -------------------- UND branch --------------------
             visual_first = 0
             if training_args.validation_type.lower() in ("und", "und_gen", "gen_und") and len(val_texts_und) > 0:
-                # 准备可视化用的输入视频（每步都构造，避免依赖 step==0 的局部变量）  # fix
+                # Prepare input video for visualization every step to avoid depending on step==0 locals  # fix
                 vis_list = []
                 curr_sample, curr_video_tensor_index = 0, 0
-                for i_gt, N_target in enumerate(val_sample_N_target[:-1]):  # 去除最后pad样本
+                for i_gt, N_target in enumerate(val_sample_N_target[:-1]):  # Remove the final padding sample
                     left, right = sample_splits[i_gt][0], sample_splits[i_gt][-1] + 1
                     N_target_VIT = val_attn_modes[left:right].count("full")
                     if val_sample_type[i_gt] != "und":
@@ -1133,21 +1133,21 @@ def validate_on_fixed_batch(
                     if curr_sample > training_args.validation_max_samples:
                         break
                     if N_target_VIT != 0:
-                        video_tensor = val_data["padded_videos_vit"][curr_video_tensor_index : curr_video_tensor_index + N_target_VIT]  # [N], 每一项为[C 2 H W] or [C T H W]
+                        video_tensor = val_data["padded_videos_vit"][curr_video_tensor_index : curr_video_tensor_index + N_target_VIT]  # [N], each item is [C 2 H W] or [C T H W]
                         curr_video_tensor_index += N_target_VIT
                         v_thwc = decode_video_tensor(video_tensor, video_type="vit")
 
-                        is_image = v_thwc.shape[0] == 2  # 与原注释保持一致：2帧则视作图像
+                        is_image = v_thwc.shape[0] == 2  # Match the original convention: two frames are treated as an image
                         media_data = v_thwc[0] if is_image else np.ascontiguousarray(v_thwc.transpose(0, 3, 1, 2))
                     else:
                         media_data, is_image = None, True
 
-                    if media_data is None and vis_list == [] and "full" in val_attn_modes:  # 避免第一行图像为None 导致的显示退化
+                    if media_data is None and vis_list == [] and "full" in val_attn_modes:  # Avoid display degradation when the first-row image is None
                         visual_first += 1
                         continue
                     vis_list.append((media_data, is_image))
 
-                # 第 0 步记录 GT
+                # Log GT at step 0
                 if curr_step == 0:
                     local_gt_media_data = []
                     for i_gt, (media_data, is_image) in enumerate(vis_list):
@@ -1155,7 +1155,7 @@ def validate_on_fixed_batch(
 
                         bos_token_id = tokenizer.decode(new_token_ids["bos_token_id"])
                         cap = cap.split(bos_token_id)
-                        cap_target = cap[-1]  # 取出作为target
+                        cap_target = cap[-1]  # Use it as the target
                         cap = (bos_token_id).join(cap[:-1])
 
                         caption = cap

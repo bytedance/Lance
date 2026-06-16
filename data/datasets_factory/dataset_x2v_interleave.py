@@ -10,23 +10,23 @@ from data.system_prompt_render import render_qwenvl_prompt, expand_and_index_by_
 
 class X2VInterleaveIterableDataset(BaseMMParquetDataset):
     def __init__(self, *args, **kwargs):
-        kwargs.setdefault("vision_stream", "vae_video")  # NOTE: 必须指定为 vae_video or vit_video or 其它⚠️
+        kwargs.setdefault("vision_stream", "vae_video")  # NOTE: Must be vae_video, vit_video, or another supported stream
         super().__init__(*args, **kwargs)
 
-        self.target_modality = kwargs.get("target_modality", "image") #默认 "image"  ,  目标 element 类型: 如果是I2T 则为"text"
+        self.target_modality = kwargs.get("target_modality", "image") # Default is "image"; target element type is "text" for I2T
         self.task_type = kwargs.get("task_type", "t2v")
         self.task_type_rate = kwargs.get("task_type_rate", 1)
         self.text_first = True
-        self.L_video_group = kwargs.get("L_video_group", 1000)  # L_video_group 为视频拆分成的group 数量, 大于t 则为不处理
-        self.random_choose_group = kwargs.get("random_choose_group", False) # 是否随机选择 视频组
-        self.raw_bytes_input = kwargs.get("raw_bytes_input", False) # 图像和视频是否原始字节输入
+        self.L_video_group = kwargs.get("L_video_group", 1000)  # Number of groups used to split a video; values larger than T disable grouping
+        self.random_choose_group = kwargs.get("random_choose_group", False) # Whether to randomly choose video groups
+        self.raw_bytes_input = kwargs.get("raw_bytes_input", False) # Whether image and video inputs are raw bytes
         if self.local_rank == 0:
             self.logger.info(f"X2VInterleaveIterableDataset raw_bytes_input: {self.raw_bytes_input}")
 
     def _process_row(self, row: Any, parquet_idx: int, row_group_id: int, row_idx: int, worker_id: int, parquet_file_path: str) -> Optional[Dict[str, Any]]:
         """
-        处理单行数据。
-        如果处理失败或数据无效，则返回 None。
+        Process one row.
+        Return None if processing fails or the data is invalid.
         """
         try:
             if self.dataset_type == "interleave":
@@ -36,7 +36,7 @@ class X2VInterleaveIterableDataset(BaseMMParquetDataset):
                 try:
                     interleave_array, element_dtype_array = self.transform_row(row)
                 except Exception as e:
-                    if "ocr" not in self.dataset_type: # OCR  有过滤， 忽略此项loggr
+                    if "ocr" not in self.dataset_type: # OCR has filtering; skip this log
                         self.logger.warning(f"Warning transform row: {e} in self.dataset_type: {self.dataset_type}")
                     return None
 
@@ -48,7 +48,7 @@ class X2VInterleaveIterableDataset(BaseMMParquetDataset):
                 self.logger.warning(f"Warning processing row: num of target element {self.target_modality} is 0, element_dtype_array is {element_dtype_array}")
                 return None
 
-            # 选择 任务类型
+            # Select task type
             if isinstance(self.task_type, str):
                 task_type_sample = self.task_type
             elif "text" not in element_dtype_array[condition_idx]:
@@ -63,13 +63,13 @@ class X2VInterleaveIterableDataset(BaseMMParquetDataset):
             else:
                 self.frame_condition_idx = []
 
-            num_tokens, sequence_plan, text_ids_list, video_tensor_list = [], [], [], []  # sequence_plan 定义了loss、cfg等标记信息
+            num_tokens, sequence_plan, text_ids_list, video_tensor_list = [], [], [], []  # sequence_plan stores loss, cfg, and other marker metadata
             text_template_user, text_template_assistant, vit_num_tokens, search_text = [], [], [], ""
             num_split_vit, num_split_vae, num_split_text = 0, 0, 0
             is_offline = False
             for idx in range(target_idx[-1] + 1):
-                if idx in condition_idx:  # 处理条件element
-                    if task_type_sample in ["t2v", "tv2v", "vt2v", "flf2v", "ff2v"] and element_dtype_array[idx] == "text":  # 文本条件element (必须处理)
+                if idx in condition_idx:  # Process condition element
+                    if task_type_sample in ["t2v", "tv2v", "vt2v", "flf2v", "ff2v"] and element_dtype_array[idx] == "text":  # Text condition element (required)
                         if num_split_text >= self.max_num_split_text:
                             continue
                         caption = interleave_array[idx]
@@ -78,7 +78,7 @@ class X2VInterleaveIterableDataset(BaseMMParquetDataset):
                         if not caption:
                             continue
                         if self.text_template:
-                            if random.random() > self.data_config['text_cond_dropout_prob']: # HACK : cfg 处理, 进行text cond 的drop
+                            if random.random() > self.data_config['text_cond_dropout_prob']: # HACK: cfg handling; drop text condition
                                 text_template_user.append({"type": "text", "text": caption})
                                 search_text = caption
                         else:
@@ -90,20 +90,20 @@ class X2VInterleaveIterableDataset(BaseMMParquetDataset):
                                     "type": "text",
                                     "enable_cfg": 1,
                                     "loss": 0,
-                                    "special_token_loss": 0,  # NOTE: 需要自己给特殊token，不做predict
+                                    "special_token_loss": 0,  # NOTE: Special tokens are provided manually and are not predicted
                                     "special_token_label": None,
                                 }
                             )
                         num_split_text += 1
-                    elif task_type_sample in ["v2v", "tv2v", "vt2v", "flf2v", "ff2v"] and element_dtype_array[idx] in ["image", "video"]:  # 处理图像条件element  (可选处理)
+                    elif task_type_sample in ["v2v", "tv2v", "vt2v", "flf2v", "ff2v"] and element_dtype_array[idx] in ["image", "video"]:  # Process visual condition element (optional)
                         if num_split_vit >= self.max_num_split_vit:
                             continue
-                        if self.text_template and random.random() < self.data_config['vit_cond_dropout_prob']: # HACK : cfg 处理, 进行 vit cond 的drop ， 放在这即 drop vae & vit cond
+                        if self.text_template and random.random() < self.data_config['vit_cond_dropout_prob']: # HACK: cfg handling; drop vit condition here, which also drops vae and vit conditions
                             continue
 
                         media_url = interleave_array[idx]
                         if "vit" in self.vision_cond_type:
-                            # if self.text_template and random.random() < self.data_config['vit_cond_dropout_prob']: # HACK : cfg 处理, 进行 vit cond 的drop
+                            # if self.text_template and random.random() < self.data_config['vit_cond_dropout_prob']: # HACK: cfg handling; drop vit condition
                             #     pass
                             # else:
                             video_tensor, num_tokens_, thw = self.get_video_tensor(media_url, vision_stream="vit_video", element_dtype=element_dtype_array[idx], raw_bytes_input=self.raw_bytes_input)
@@ -113,13 +113,13 @@ class X2VInterleaveIterableDataset(BaseMMParquetDataset):
                                     "type": "vit_video",
                                     "enable_cfg": 1,
                                     "loss": 0,
-                                    "special_token_loss": 0,  # NOTE: 需要自己给特殊token，不做predict
+                                    "special_token_loss": 0,  # NOTE: Special tokens are provided manually and are not predicted
                                     "special_token_label": None,  # eos
                                     "thw": thw,
-                                    "apply_text_template": self.text_template,  # 默认false
+                                    "apply_text_template": self.text_template,  # Default is false
                                 }
                             )
-                            num_tokens.append(num_tokens_)  # NOTE: 计算vision token数量
+                            num_tokens.append(num_tokens_)  # NOTE: Count vision tokens
                             num_split_vit += 1
 
                             if self.text_template:
@@ -134,14 +134,14 @@ class X2VInterleaveIterableDataset(BaseMMParquetDataset):
                                     "type": "vae_video",
                                     "enable_cfg": 1,
                                     "loss": 0,
-                                    "special_token_loss": 0,  # NOTE: 需要自己给特殊token，不做predict
+                                    "special_token_loss": 0,  # NOTE: Special tokens are provided manually and are not predicted
                                     "special_token_label": None,  # eos
                                     "thw": thw,
-                                    "apply_text_template": self.text_template,  # 默认false
+                                    "apply_text_template": self.text_template,  # Default is false
                                 }
                             )
                             video_tensor_list.append(video_tensor)
-                            num_tokens.append(num_tokens_)  # NOTE: 计算vision token数量
+                            num_tokens.append(num_tokens_)  # NOTE: Count vision tokens
                             num_split_vae += 1
 
                             if self.text_template:
@@ -150,7 +150,7 @@ class X2VInterleaveIterableDataset(BaseMMParquetDataset):
 
                         del video_tensor
 
-                elif idx in target_idx:  # 处理目标element
+                elif idx in target_idx:  # Process target element
                     # if num_split_vae >= self.max_num_split_vae:
                     #     continue
                     media_url = interleave_array[idx]
@@ -159,7 +159,7 @@ class X2VInterleaveIterableDataset(BaseMMParquetDataset):
                     if isinstance(video_tensor, list):
                         is_offline = True
 
-                    # 支持group-by-group的生成
+                    # Support group-by-group generation
                     if is_offline:
                         _ = video_tensor[0].shape[0]
                     else:
@@ -167,19 +167,19 @@ class X2VInterleaveIterableDataset(BaseMMParquetDataset):
 
                     video_tensor_list.append(video_tensor)
                     del video_tensor
-                    num_tokens.append(num_tokens_)  # NOTE: 计算vision token数量
+                    num_tokens.append(num_tokens_)  # NOTE: Count vision tokens
                     sequence_plan.append(
                         {
                             "type": "vae_video",
                             "enable_cfg": 0,
                             "loss": 1,
-                            "special_token_loss": 0,  # NOTE: 需要自己给特殊token，不做predict
+                            "special_token_loss": 0,  # NOTE: Special tokens are provided manually and are not predicted
                             "special_token_label": None,
                             "frame_condition_idx": self.frame_condition_idx,
                             "L_video_group": self.L_video_group,
                             "random_choose_group": self.random_choose_group,
                             "thw": thw,
-                            "apply_text_template": self.text_template,  # 默认false
+                            "apply_text_template": self.text_template,  # Default is false
                             }
                             #"N_key_frame": self.N_key_frame,
                     )
@@ -189,14 +189,14 @@ class X2VInterleaveIterableDataset(BaseMMParquetDataset):
                         text_template_assistant.append({"type": element_dtype_array[idx]})
                         vit_num_tokens.append(num_tokens_)
 
-                        # 先视频后文本的处理：
+                        # Handle video before text:
                         text_template_user = text_template_user[1:] + text_template_user[:1] # HACK
 
 
                         messages = [
                             {
                                 "role": "user",
-                                "content":  text_template_user, # 原使用
+                                "content":  text_template_user, # Original usage
                             },
                             {
                                 "role": "assistant",
@@ -240,6 +240,6 @@ class X2VInterleaveIterableDataset(BaseMMParquetDataset):
             return sample
 
         except Exception as e:
-            # 最外层保留一个总的异常捕获，以防其他未知错误
+            # Keep a top-level catch-all for unexpected errors
             self.logger.warning(f"Error processing row: {e} in rg#{row_group_id}, {parquet_file_path}")
             return None

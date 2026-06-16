@@ -21,7 +21,7 @@
     <br>
     <em>ByteDance</em>
     <br>
-    <sup>*</sup> 共同一作 &nbsp;&nbsp; <sup>✉</sup> 通讯作者 &nbsp;&nbsp; <sup>§</sup> Project lead
+    <sup>*</sup> 共同一作 &nbsp;&nbsp; <sup>✉</sup> 通讯作者 &nbsp;&nbsp; <sup>§</sup> 项目负责人
   </p>
   <p>
     <a href="https://lance-project.github.io/" style="text-decoration: none; margin: 0 8px;"><img src="https://img.shields.io/badge/Homepage-Lance-blue?style=flat" alt="Homepage"></a>
@@ -37,8 +37,9 @@
 
 ## 🔥 更新
 
+- **`2026/06/16`**: 🛠️ 发布 Lance 微调代码。查看 [训练指南](train_zh.md) 了解细节。
 - **`2026/06/03`**: 🚀 Lance 现已被 [vLLM-Omni](https://github.com/vllm-project/vllm-omni) 支持。查看 [recipe](https://github.com/vllm-project/vllm-omni/blob/main/recipes/ByteDance/Lance.md)！
-- **`2026/05/29`**: 🔥 增加 Image-to-Video generation 支持。[查看更多](assets/docs/changelog/2026-05-29.md)！
+- **`2026/05/29`**: 💪 增加 Image-to-Video generation 支持。[查看更多](assets/docs/changelog/2026-05-29.md)！
 - **`2026/05/26`**: 🎨 Gradio 界面现已支持图像和视频生成、编辑与理解任务。[欢迎体验](assets/docs/changelog/2026-05-26.md)！
 - **`2026/05/25`**: ✨ [Hugging Face Space](https://huggingface.co/spaces/bytedance-research/Lance) 已上线，感谢 HF 团队的支持！
 - **`2026/05/19`**: 🤗 技术报告现已发布于 [arXiv](http://arxiv.org/abs/2605.18678)。
@@ -46,9 +47,9 @@
 
 ## 🌟 亮点
 
-**Lance** 是一个3B参数、原生统一的多模态模型，在单一框架下同时支持 **图像与视频的理解、生成和编辑**。
+**Lance** 是一个 3B 参数、原生统一的多模态模型，在单一框架下同时支持 **图像与视频的理解、生成和编辑**。
 
-- **3B 规模高效。** 仅使用 **3B active parameters**，Lance 即可在图像生成、图像编辑和视频生成等基准上取得有竞争力的表现。
+- **3B 规模高效。** 仅使用 **3B 激活参数**，Lance 即可在图像生成、图像编辑和视频生成等基准上取得有竞争力的表现。
 - **从零训练。** Lance 采用分阶段多任务训练配方从零训练，并在 **不超过 128 张 A100 GPU** 的预算内完成训练。
 
 我们正在持续更新和改进本仓库。如果你发现任何问题或有改进建议，欢迎提出 issue 或提交 pull request（PR）💖。
@@ -56,10 +57,6 @@
 <div align="center">
   <img src="assets/benchmarks/benchmark-overview.png" alt="Lance benchmark overview across image generation, image editing, video generation, and video understanding" width="980">
 </div>
-
-## 📅 路线图
-
-- [ ] 发布 fine-tuning 代码。
 
 ## 🎨 演示
 
@@ -229,7 +226,7 @@ bash inference_lance.sh \
 
 生成任务可选参数：
 
-- `--ENHANCE_PROMPT true`：启用 T2V/I2V prompt rewrite。prompt enhance rewrite 通常能提升生成效果。该选项需要 `openai==2.26.0`，已写入 `requirements.txt`；如果没有通过 `requirements.txt` 安装依赖，请先执行 `pip install openai==2.26.0`。启用前请先在 `common/utils/caption_rewrite.py` 中配置 `API_KEY`、`MODEL_NAME` 和 `BASE_URL`；如果没有配置有效 rewrite 参数，会自动跳过 prompt rewrite，此时建议尽量参考提供示例中的 prompt 风格手写输入。
+- `--ENHANCE_PROMPT true`：启用 T2V/I2V prompt rewrite。T2V 使用纯文本 rewrite，I2V 使用文本加输入图像 rewrite。prompt rewrite 通常能提升生成效果。该选项需要 `openai==2.26.0`，已写入 `requirements.txt`；如果没有通过 `requirements.txt` 安装依赖，请先执行 `pip install openai==2.26.0`。启用前请先在 `common/utils/caption_rewrite.py` 中配置 `API_KEY`、`MODEL_NAME` 和 `BASE_URL`；如果没有配置有效 rewrite 参数，会自动跳过 prompt rewrite，此时建议尽量参考提供示例中的 prompt 风格手写输入。
 
 ##### 文生图
 
@@ -324,7 +321,7 @@ bash inference_lance.sh \
 | `VIDEO_HEIGHT` / `VIDEO_WIDTH`| `768` | 空间分辨率。*编辑任务不使用该参数（由输入图像/视频决定）。* |
 | `RESOLUTION` | `"video_480p"` | 基础分辨率预设（如 `image_768res` 或 `video_480p`）。 |
 | `CONFIG_PATH` | `""` | 可选的自定义验证 JSON/JSONL 文件路径。为空时使用任务默认示例配置。 |
-| `ENHANCE_PROMPT` | `false` | 可选的 T2V/I2V prompt rewrite 开关。T2V 使用纯文本 rewrite，I2V 使用文本加输入图像 rewrite。prompt enhance rewrite 通常能提升生成效果。该选项需要 `openai==2.26.0`，已写入 `requirements.txt`；也可以手动执行 `pip install openai==2.26.0`。启用前请先在 `common/utils/caption_rewrite.py` 中配置 `API_KEY`、`MODEL_NAME` 和 `BASE_URL`；如果没有有效 rewrite 参数，建议尽量参考提供示例中的 prompt 风格手写输入。 |
+| `ENHANCE_PROMPT` | `false` | 可选的 T2V/I2V prompt rewrite 开关。T2V 使用纯文本 rewrite，I2V 使用文本加输入图像 rewrite。prompt rewrite 通常能提升生成效果。该选项需要 `openai==2.26.0`，已写入 `requirements.txt`；也可以手动执行 `pip install openai==2.26.0`。启用前请先在 `common/utils/caption_rewrite.py` 中配置 `API_KEY`、`MODEL_NAME` 和 `BASE_URL`；如果没有有效 rewrite 参数，建议尽量参考提供示例中的 prompt 风格手写输入。 |
 
 </details>
 
@@ -555,14 +552,14 @@ python lance_gradio.py --server-name 0.0.0.0 --server-port 7860
   <thead>
     <tr>
       <th align="left">类型</th>
-      <th align="left">Model</th>
+      <th align="left">模型</th>
       <th align="center">#&nbsp;Params.</th>
       <th align="center">Total Score ↑</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td align="center" rowspan="12"><i>Gen. Only</i></td>
+      <td align="center" rowspan="12"><i>仅生成</i></td>
       <td align="left">ModelScope</td><td align="center">1.7B</td><td align="center">75.75</td>
     </tr>
     <tr>
@@ -599,7 +596,7 @@ python lance_gradio.py --server-name 0.0.0.0 --server-port 7860
       <td align="left">Wan2.1-T2V</td><td align="center">14B</td><td align="center">83.69</td>
     </tr>
     <tr>
-      <td align="center" rowspan="6"><i>Unified</i></td>
+      <td align="center" rowspan="6"><i>统一模型</i></td>
       <td align="left">HaproOmni</td><td align="center">7B</td><td align="center">78.10</td>
     </tr>
     <tr>

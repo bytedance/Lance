@@ -119,7 +119,7 @@ class FrameSampler:
         self.max_num_frames = max_num_frames
         self.min_num_frames = min_num_frames
         self.sample = sample
-    
+
     def __call__(self, file_name):
         fn = read_frames_folder if file_name.endswith('/') else read_frames_decord
         frames = fn(file_name, num_frames=self.max_num_frames, min_num_frames=self.min_num_frames, sample=self.sample)
@@ -137,7 +137,7 @@ def sample_mp4_frames(mp4_p, n_frames=None, fps=None, return_frame_indices=False
         vr = decord.VideoReader(mp4_p, num_threads=1)
     elif isinstance(mp4_p, decord.video_reader.VideoReader):
         vr = mp4_p
-    video_fps = vr.get_avg_fps()  # 获取视频的帧率
+    video_fps = vr.get_avg_fps()  # Get the video frame rate
     video_duration = len(vr) / video_fps
     if n_frames is not None:
         if random_sample:
@@ -146,7 +146,7 @@ def sample_mp4_frames(mp4_p, n_frames=None, fps=None, return_frame_indices=False
             frame_indices = np.linspace(0, len(vr)-1, n_frames, dtype=int).tolist()
     else:
         frame_indices = [int(i) for i in np.arange(0, len(vr)-1, video_fps/fps)]
-    frames = vr.get_batch(frame_indices).asnumpy()  # 转换为 numpy 数组
+    frames = vr.get_batch(frame_indices).asnumpy()  # Convert to a numpy array
     frames = [Image.fromarray(frame).convert("RGB") for frame in frames]
     if not return_frame_indices:
         return frames, video_duration
@@ -160,6 +160,6 @@ def sample_mp4_frames_by_indices(mp4_p, frame_indices: list):
     elif isinstance(mp4_p, decord.video_reader.VideoReader):
         vr = mp4_p
     # sample the frames in frame_indices
-    frames = vr.get_batch(frame_indices).asnumpy()  # 转换为 numpy 数组
+    frames = vr.get_batch(frame_indices).asnumpy()  # Convert to a numpy array
     frames = [Image.fromarray(frame).convert("RGB") for frame in frames]
     return frames

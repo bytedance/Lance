@@ -48,14 +48,14 @@ modality_map = {
 @dataclass
 class DataConfig:
     """
-    DataConfig 版本，其中 vae_downsample 是一个三元组。
+    DataConfig variant where vae_downsample is a 3-tuple.
     """
     grouped_datasets: Dict[str, Any]
     text_cond_dropout_prob: float = 0.1
     vit_cond_dropout_prob: float = 0.4
     vae_cond_dropout_prob: float = 0.1
 
-    # 将 vae_downsample 改为三元组，分别代表 (时间, 高度, 宽度) 的下采样率
+    # Use a 3-tuple for vae_downsample: temporal, height, and width downsampling rates
     vae_downsample: Tuple[int, int, int] = (4, 16, 16)
 
     max_latent_size: int = 64 # by ModelArguments
@@ -69,7 +69,7 @@ class DataConfig:
     @classmethod
     def from_yaml(cls, file_path: str) -> 'DataConfig':
         """
-        从YAML文件创建DataConfig实例
+        Create a DataConfig instance from a YAML file.
         """
         with open(file_path, "r") as stream:
             data = yaml.safe_load(stream)
@@ -85,11 +85,11 @@ class PackedDataset(torch.utils.data.IterableDataset):
         local_rank,
         world_size,
         num_workers,
-        expected_num_tokens=32768,  # 打包序列的期望长度
-        max_num_tokens_per_sample=16384,  # 单个样本的最大长度
-        max_num_tokens=36864,  # 打包序列的硬上限
-        prefer_buffer_before=16384,  # 优先使用缓冲区的样本长度阈值
-        max_buffer_size=50,  # 缓冲区最大容量
+        expected_num_tokens=32768,  # Expected packed sequence length
+        max_num_tokens_per_sample=16384,  # Maximum length of a single sample
+        max_num_tokens=36864,  # Hard limit for packed sequence length
+        prefer_buffer_before=16384,  # Sample-length threshold for preferring the buffer
+        max_buffer_size=50,  # Maximum buffer capacity
         interpolate_pos=False,
         use_flex=False,
         data_status=None,
@@ -115,36 +115,36 @@ class PackedDataset(torch.utils.data.IterableDataset):
         self.cfg_uncond_token_id = kwargs.get("cfg_uncond_token_id", 151643)
         self.image_token_id = image_token_id
         self.data_args = kwargs
-        self.expected_num_ce_loss_tokens = kwargs.get("expected_num_ce_loss_tokens", 1000000) # 默认的 1000000 等价于无限制
+        self.expected_num_ce_loss_tokens = kwargs.get("expected_num_ce_loss_tokens", 1000000) # Default 1000000 effectively means unlimited
         self.N_key_frame = kwargs.get("N_key_frame", -1)
         self.fbyf_type = kwargs.get("fbyf_type", "group")
         self.fbyf_group_interval = kwargs.get("fbyf_group_interval", -1)
         self.incre_time_pro = kwargs.get("incre_time_pro", 0)
         self.require_und_gen = kwargs.get("require_und_gen", False)
 
-        # NOTE: 这里添加了<|im_start|>、<|im_end|>等特殊token
+        # NOTE: Add special tokens such as <|im_start|> and <|im_end|> here
         for k, v in special_tokens.items():
             setattr(self, k, v)
 
         # add a logger
         self.logger = get_logger()
-        # self.log_rank0 = lambda msg: self.logger.info(msg) if get_global_rank() == 0 else None # 只在rank0打印
+        # self.log_rank0 = lambda msg: self.logger.info(msg) if get_global_rank() == 0 else None # Log only on rank 0
 
         grouped_datasets, is_mandatory, grouped_weights, data_type = self.build_datasets(data_config.grouped_datasets, data_status)
         self.grouped_datasets = grouped_datasets
         # self.dataset_iters = [iter(dataset) for dataset in grouped_datasets] # this is dataset iter
-        self.dataset_iters = None # 延迟到 __iter__ 再创建
+        self.dataset_iters = None # Delay creation until __iter__
         self.is_mandatory = is_mandatory
         self.grouped_weights = grouped_weights
         self.interpolate_pos = interpolate_pos
         self.data_type = data_type
 
-    # 仅在 rank0 打印（实例方法可被pickle引用）
+    # Log only on rank 0; instance methods can be pickled
     def log_rank0(self, msg: str):
         if get_global_rank() == 0:
             self.logger.info(msg)
 
-    # 避免把 logger/迭代器等不可序列化对象放进子进程
+    # Avoid sending non-serializable objects such as loggers or iterators to child processes
     def __getstate__(self):
         state = self.__dict__.copy()
         state["logger"] = None
@@ -168,7 +168,7 @@ class PackedDataset(torch.utils.data.IterableDataset):
 
     def set_sequence_status(self):
         sequence_status = dict(
-            curr                        = 0, # 指针
+            curr                        = 0, # Pointer
             sample_lens                 = [],
             sample_type                 = [],
             sample_N_target             = [],
@@ -196,7 +196,7 @@ class PackedDataset(torch.utils.data.IterableDataset):
             vae_video_grid_thw          = [], # for vae video
             video_grid_thw              = [], # for all video tensor
             vit_video_tensors           = [], # for vit original video tensor
-            # offline 参数
+            # Offline arguments
             vae_video_latent            = [], # for vae video latent offline
             vae_data_mode               = [], # offline or online
             vit_data_mode               = [], # offline or online
@@ -238,7 +238,7 @@ class PackedDataset(torch.utils.data.IterableDataset):
 
         data['padded_videos'] = sequence_status.pop('vae_video_tensors')
         if len(data['padded_videos']) > 0:
-            # 打包成动态分辨率
+            # Pack as dynamic resolution
             # NOTE: The following keys are shared between image and video for now
             if 'patchified_vae_latent_shapes' not in data:
                 data['patchified_vae_latent_shapes'] = sequence_status['vae_latent_shapes']
@@ -269,7 +269,7 @@ class PackedDataset(torch.utils.data.IterableDataset):
             data['packed_vit_token_indexes'] = torch.tensor(sequence_status['packed_vit_token_indexes'])
             data['vit_token_seqlens'] = torch.tensor(sequence_status['vit_token_seqlens'])
 
-            # 打包成动态分辨率
+            # Pack as dynamic resolution
             data['padded_videos_vit'] = sequence_status.pop('vit_video_tensors')
 
         # if the model is required to perform visual generation
@@ -288,7 +288,7 @@ class PackedDataset(torch.utils.data.IterableDataset):
         if len(sequence_status['vit_video_grid_thw']) > 0:
             data['vit_video_grid_thw'] = torch.tensor(sequence_status['vit_video_grid_thw'])
 
-        # 内存优化：释放不再需要的sequence_status内容
+        # Memory optimization: release sequence_status contents that are no longer needed
         sequence_status.clear()
         return data
 
@@ -298,7 +298,7 @@ class PackedDataset(torch.utils.data.IterableDataset):
         grouped_weights = []
         data_type = []
         for grouped_dataset_name, dataset_args in datasets_metainfo.items():
-            if grouped_dataset_name.startswith('D'): # 处理新的多重嵌套逻辑
+            if grouped_dataset_name.startswith('D'): # Handle the new multi-level nested logic
                 grouped_dataset_name, dataset_args = list(dataset_args.items())[0]
             if '2t' in grouped_dataset_name:
                 data_type.append('x2t')
@@ -311,16 +311,16 @@ class PackedDataset(torch.utils.data.IterableDataset):
                 # NOTE: NOT for video
                 frame_sampler = FrameSampler(**dataset_args.pop('frame_sampler_args'))
                 dataset_args['frame_sampler'] = frame_sampler
-            if 'image_transform_args' in dataset_args.keys(): # TODO: 废弃⚠️
+            if 'image_transform_args' in dataset_args.keys(): # TODO: deprecate this
                 transform = ImageTransform(**dataset_args.pop('image_transform_args'))
                 dataset_args['transform'] = transform
             if 'video_transform_args' in dataset_args.keys():
                 # video
                 transform = VideoTransform(**dataset_args.pop('video_transform_args'))
                 dataset_args['transform'] = transform
-                dataset_args['vae_downsample'] = self.data_config.vae_downsample # fix: 传进去！TODO: 应该考虑下vae_downsample, vit_downsample, 低优
+                dataset_args['vae_downsample'] = self.data_config.vae_downsample # fix: pass this in; TODO: consider vae_downsample and vit_downsample, low priority
 
-                # 这里添加video的frame sampler
+                # Add the video frame sampler here
                 if 'video_frame_sampler_args' in dataset_args:
                     dataset_args['res_dump'] = dataset_args['video_frame_sampler_args']['res_dump'] if 'res_dump' in dataset_args['video_frame_sampler_args'].keys() else ''
 
@@ -335,30 +335,30 @@ class PackedDataset(torch.utils.data.IterableDataset):
                 vit_transform = VideoTransform(**dataset_args.pop('vit_video_transform_args'))
                 dataset_args['vit_transform'] = vit_transform
 
-            elif 'vit_image_transform_args' in dataset_args.keys(): # TODO: 废弃⚠️
+            elif 'vit_image_transform_args' in dataset_args.keys(): # TODO: deprecate this
                 vit_transform = ImageTransform(**dataset_args.pop('vit_image_transform_args'))
                 dataset_args['vit_transform'] = vit_transform
 
             assert 'dataset_names' in dataset_args, dataset_args.keys() or "missing 'dataset_names'"
-            dataset_names = dataset_args.pop('dataset_names') # NOTE: 注意这里的pop写法
+            dataset_names = dataset_args.pop('dataset_names') # NOTE: Pay attention to this pop pattern
             dataset_args['data_dir_list'] = []
 
-            # 遍历构建datasets
+            # Iterate and build datasets
             for item, meta_info in dataset_names.items():
                 if self.local_rank == 0:
                     self.logger.info(f'Preparing Dataset {grouped_dataset_name}/{item}')
 
                 data_dir = meta_info['data_dir']
                 if isinstance(data_dir, str):
-                    # 如果是路径
+                    # If it is a path
                     dataset_args['data_dir_list'].append(meta_info['data_dir'])
                 elif isinstance(data_dir, list):
-                    # 如果是列表
+                    # If it is a list
                     dataset_args['data_dir_list'].extend(data_dir)
                 else:
                     raise Exception(f'Unknown data_dir type {type(data_dir)}')
 
-                # NOTE: 外层get所有路径，然后传进去！！！
+                # NOTE: Collect all paths at the outer level, then pass them in
                 all_data_paths = get_parquet_data_paths_balanced(
                     data_dir_list=dataset_args.get('data_dir_list'),
                     rank=self.local_rank,
@@ -379,7 +379,7 @@ class PackedDataset(torch.utils.data.IterableDataset):
 
             dataset_args.update(self.data_args)
 
-            # 更新
+            # Update
             dataset_args['vit_cond_dropout_prob'] = self.data_config.vit_cond_dropout_prob
             dataset_args['text_cond_dropout_prob'] = self.data_config.text_cond_dropout_prob
             dataset_args['vae_cond_dropout_prob'] = self.data_config.vae_cond_dropout_prob
@@ -398,7 +398,7 @@ class PackedDataset(torch.utils.data.IterableDataset):
 
         return datasets, is_mandatory, grouped_weights, data_type
 
-    # 在pack_sequence函数中添加视频处理分支
+    # Add the video processing branch in pack_sequence
     def pack_sequence(self, sample: Dict[str, Any], sequence_status: Dict[str, Any]):
         image_tensor_list = sample.get('image_tensor_list', []) # just for debug
         video_tensor_list = sample.get('video_tensor_list', [])
@@ -422,20 +422,20 @@ class PackedDataset(torch.utils.data.IterableDataset):
             if split_start:
                 curr_split_len = 0
 
-            # TODO: 增加更多的 item type 来辅助判断
+            # TODO: add more item types to help classification
             if item['type'] == 'text':
-                sample_type = 'und' # 会覆盖，因此仅最后一项发挥作用
+                sample_type = 'und' # This is overwritten, so only the last item takes effect
                 text_ids = text_ids_list.pop(0)
                 if item['enable_cfg'] == 1 and random.random() < self.data_config.text_cond_dropout_prob:
 
-                    if self.cfg_type == 0: # 0 为完全去除文本条件
+                    if self.cfg_type == 0: # 0 fully removes the text condition
                         continue
-                    elif self.cfg_type == 1: # 1 为仅保留特殊token
+                    elif self.cfg_type == 1: # 1 keeps only special tokens
                         text_ids = []
-                    elif self.cfg_type == 2: # 2 为保留特殊token + 中间文本token 替换为uncond_token
+                    elif self.cfg_type == 2: # 2 keeps special tokens and replaces middle text tokens with uncond_token
                         text_ids = [self.cfg_uncond_token_id] * len(text_ids)
 
-                if not item.get('special_token_start_nouse'):  # special_token_start_nouse 为 None 或 False 时
+                if not item.get('special_token_start_nouse'):  # When special_token_start_nouse is None or False
                     shifted_text_ids = [self.bos_token_id] + text_ids  # NOTE: self.bos_token_id=151644 <|im_start|>
                 else:
                     shifted_text_ids = text_ids
@@ -443,7 +443,7 @@ class PackedDataset(torch.utils.data.IterableDataset):
                 sequence_status['packed_text_ids'].extend(shifted_text_ids)
                 sequence_status['packed_text_indexes'].extend(range(curr, curr + len(shifted_text_ids)))
 
-                # NOTE: 生成还是理解可以通过 item['loss'] == 1 来判定
+                # NOTE: item['loss'] == 1 identifies understanding vs generation
                 if item['loss'] == 1:
                     loss_token_shift = item.get('loss_token_shift') or 0
                     sequence_status['ce_loss_indexes'].extend(range(curr - loss_token_shift, curr + len(shifted_text_ids)))
@@ -474,28 +474,28 @@ class PackedDataset(torch.utils.data.IterableDataset):
             elif item["type"] == "text_template":
                 apply_text_template = True
                 text_ids = text_ids_list.pop(0)
-                # 当前模版仅在und类型下生效，因此先不考虑cfg
+                # The current template only applies to UND, so ignore cfg for now
 
                 sequence_status["packed_text_ids"].extend(text_ids)
                 sample_lens = len(text_ids)
-                spans_index = item.get("spans_index", None)  # vision 的填充token，list 的形式 ,每项为对应的video/image pad token 的index list，
+                spans_index = item.get("spans_index", None)  # Vision padding tokens as a list; each item is an index list for the corresponding video/image pad tokens
                 curr_sample_modality = []
-                caption_index = item.get("cap_index", []) # 对应 文本 （非System Prompt）的index
+                caption_index = item.get("cap_index", []) # Indexes for text excluding the system prompt
 
                 for video_id, span_index in enumerate(spans_index):
-                    vision_start, vision_end = curr_split_idx + span_index[0], curr_split_idx + span_index[-1]  #对应第一和最后一个'<|video_pad|>' 的index
+                    vision_start, vision_end = curr_split_idx + span_index[0], curr_split_idx + span_index[-1]  # Indexes of the first and last '<|video_pad|>'
                     sequence_status["packed_text_indexes"].extend(range(curr, vision_start))
-                    if (vision_start - 1) - curr != 0:  # 确认vision前面有文本split ## HACK 相比llava 版本有修改
+                    if (vision_start - 1) - curr != 0:  # Confirm there is a text split before vision; HACK: changed from the LLaVA version
                         curr_split_len = (vision_start - 1) - curr
                         sequence_status["packed_position_ids"].extend(
                             range(curr_rope_id, curr_rope_id + curr_split_len)
-                        )  # 注意：这里是 vision_start-1 而不是 vision_start，因为 vision_start 是 video split 起始token 的位置
+                        )  # Note: use vision_start - 1, not vision_start, because vision_start is the starting token of the video split
                         curr_rope_id += curr_split_len
                         curr_sample_modality.extend([modality_map['system_prompt']] * curr_split_len)
-                        if caption_index != [] and caption_index[0] in range(curr, curr + curr_split_len): # NOTE： 不支持交错的文本，即文本必须连续，
-                            split_len_1 = caption_index[0] - curr # 文本前system_prompt 的长度
-                            split_len_2 = len(caption_index) # 文本的长度
-                            split_len_3 = curr_split_len - split_len_1 - split_len_2 # 文本后system_prompt 的长度
+                        if caption_index != [] and caption_index[0] in range(curr, curr + curr_split_len): # NOTE: interleaved text is not supported; text must be contiguous
+                            split_len_1 = caption_index[0] - curr # Length of the system prompt before text
+                            split_len_2 = len(caption_index) # Text length
+                            split_len_3 = curr_split_len - split_len_1 - split_len_2 # Length of the system prompt after text
 
                             split_len_text = [split_len_1, split_len_2, split_len_3]
                             split_len_text = [x for x in split_len_text if x != 0]
@@ -509,12 +509,12 @@ class PackedDataset(torch.utils.data.IterableDataset):
                     curr_split_len = len(span_index) + 2
                     if sequence_plan[video_id]["type"] == 'vit_video':
                         sequence_status["packed_vit_token_indexes"].extend(range(vision_start, vision_end + 1))
-                        attn_modes.append("full")  # TODO : gen 分支也使用模版则需加上判断
+                        attn_modes.append("full")  # TODO: add this check if the GEN branch also uses templates
                         curr_sample_modality.extend([modality_map['ref_vit']] * curr_split_len)
                     elif sequence_plan[video_id]["type"] == 'vae_video':
                         sequence_status["packed_vae_token_indexes"].extend(range(vision_start, vision_end + 1))
                         if sequence_plan[video_id]["loss"] == 0:
-                            attn_modes.append("full_noise")  # TODO : gen 分支也使用模版则需加上判断
+                            attn_modes.append("full_noise")  # TODO: add this check if the GEN branch also uses templates
                             if sample_task == 'edit':
                                 curr_sample_modality.extend([modality_map['ref_source']] * curr_split_len)
                             elif sample_task == 'idip' or sample_task == 'maze':
@@ -522,53 +522,53 @@ class PackedDataset(torch.utils.data.IterableDataset):
                         else:
                             if frame_condition_idx == []:
                                 sequence_status["mse_loss_indexes"].extend(range(vision_start, vision_end + 1))
-                            else: # 支持f2v , 目前不支持多个target video 处理, 多个video则需区分不同thw
+                            else: # Support f2v; multiple target videos are not currently supported because different videos need separate THW values
                                 frame_condition_indexes = []
                                 mse_loss_indexes = list(range(vision_start, vision_end + 1))
                                 for idx in frame_condition_idx:
                                     if idx == -1:
                                         idx = t - 1
                                         if idx == 1:
-                                            continue  # 如果帧数仅两帧跳过，避免所有帧均为条件帧相同
+                                            continue  # Skip when there are only two frames to avoid using identical condition frames for all frames
                                     frame_condition_indexes.extend(mse_loss_indexes[idx * h * w : (idx + 1) * h * w])
                                 mse_loss_indexes = sorted(list(set(mse_loss_indexes) - set(frame_condition_indexes)))
                                 sequence_status["mse_loss_indexes"].extend(mse_loss_indexes)
 
 
-                            attn_modes.append("noise")  # TODO : gen 分支也使用模版则需加上判断
-                            sample_type = "gen"  # 会覆盖，因此仅最后一项发挥作用
+                            attn_modes.append("noise")  # TODO: add this check if the GEN branch also uses templates
+                            sample_type = "gen"  # This is overwritten, so only the last item takes effect
                             curr_sample_modality.extend([modality_map['noise']] * curr_split_len)
 
                     sequence_status["packed_position_ids"].extend([curr_rope_id] * curr_split_len)
-                    #attn_modes.append("full")  # TODO : gen 分支也使用模版则需加上判断
+                    #attn_modes.append("full")  # TODO: add this check if the GEN branch also uses templates
                     split_lens.append(len(span_index) + 2)
-                    curr = vision_end + 1 # 对应 '<|vision_end|>' token 的index
+                    curr = vision_end + 1 # Index of the '<|vision_end|>' token
                     curr_rope_id += 1
                     sequence_status["packed_text_indexes"].append(curr)
-                    curr += 1 # 对应下一个序列的起始token
+                    curr += 1 # Starting token of the next sequence
 
                 len_split_last = sample_lens - (curr - curr_split_idx) if spans_index != [] else len(text_ids)
-                if len_split_last != 0:  # 即末尾还有一段文本
+                if len_split_last != 0:  # A trailing text segment remains
                     split_lens.append(len_split_last)
                     sequence_status["packed_text_indexes"].extend(range(curr, curr + len_split_last))
                     sequence_status["packed_position_ids"].extend(range(curr_rope_id, curr_rope_id + len_split_last))
                     attn_modes.append("causal")
                     curr_sample_modality.extend([modality_map['system_prompt']] * len_split_last)
 
-                if item["loss"] == 1: # 即代表为理解任务，需要计算ce loss
+                if item["loss"] == 1: # This marks an understanding task and requires CE loss
                         packed_label_index = item.get("packed_label_index", [])[:]
                         sequence_status["packed_label_ids"].extend(text_ids[packed_label_index[0]:])
                         packed_label_index = np.asarray(packed_label_index, dtype=np.int64) + curr_split_idx
                         ce_loss_indexes = (packed_label_index - 1).tolist()
                         sequence_status["ce_loss_indexes"].extend(ce_loss_indexes)
                         sequence_status["ce_loss_weights"].extend([len2weight(len(packed_label_index))] * (len(packed_label_index)))
-                        sample_type = "und"  # 会覆盖，因此仅最后一项发挥作用
-                # else:  # 即代表生成任务
-                #         sample_type = "gen"  # 会覆盖，因此仅最后一项发挥作用
+                        sample_type = "und"  # This is overwritten, so only the last item takes effect
+                # else:  # This marks a generation task
+                #         sample_type = "gen"  # This is overwritten, so only the last item takes effect
                         #packed_label_index = item.get("packed_label_index", [])[1:-2]
 
 
-                # 获取文本中 caption 的 index ，修改其sample_modality
+                # Get caption indexes in text and update their sample_modality
                 if caption_index != []:
                     curr_sample_modality[caption_index[0]:caption_index[-1]+1] = [modality_map['text']] * (caption_index[-1] - caption_index[0] + 1)
 
@@ -581,7 +581,7 @@ class PackedDataset(torch.utils.data.IterableDataset):
                 sample_type = 'gen'
                 video_tensor = video_tensor_list.pop(0) # CTHW
                 if item['enable_cfg'] == 1 and random.random() < self.data_config.vae_cond_dropout_prob:
-                    # FIXME fix vae dropout in video2video setting. # TODO: 确认vae_video分支里面是否需要开启enablec_cfg?
+                    # FIXME: fix VAE dropout in video2video. TODO: confirm whether enable_cfg is needed in the vae_video branch
                     # curr_rope_id += 1
                     continue
 
@@ -589,7 +589,7 @@ class PackedDataset(torch.utils.data.IterableDataset):
 
 
                 num_special_tokens = 0
-                # 添加 <|startofimage|> token (视频与图像共用) TODO: 要将image和video的special token拆开嘛？
+                # Add <|startofimage|> token shared by video and image. TODO: split image and video special tokens?
                 if not apply_text_template:
                     sequence_status['packed_text_ids'].append(self.start_of_image) # self.start_of_image=151652, <|vision_start|>
                     sequence_status['packed_text_indexes'].append(curr)
@@ -597,58 +597,58 @@ class PackedDataset(torch.utils.data.IterableDataset):
                     curr_split_len += 1
                     num_special_tokens += 1
 
-                # 在线模式下，video_tensor 为tensor, 离线模式下，video_tensor 为list [latent]
+                # In online mode, video_tensor is a tensor; in offline mode, it is a list [latent]
                 if isinstance(video_tensor, torch.Tensor):  # online
-                    # 预处理视频
+                    # Preprocess video
 
-                    sequence_status["vae_video_tensors"].append(video_tensor)  # CTHW 原始的视频，非latent
+                    sequence_status["vae_video_tensors"].append(video_tensor)  # Raw CTHW video, not latent
 
-                    # 假设 video_tensor 的形状为 (C, T, H, W)
+                    # Assume video_tensor has shape (C, T, H, W)
                     _, T, H, W = video_tensor.shape
-                    _T, _H, _W = self.data_config.vae_downsample  # NOTE: 绝对尺度的downsample，包含了patchify的！
-                    t = (T - 1) // _T + 1  # k*N+1 一般t维度不做patchify!! 如果t维度要做patchify，写法需要更新
+                    _T, _H, _W = self.data_config.vae_downsample  # NOTE: Absolute-scale downsample including patchification
+                    t = (T - 1) // _T + 1  # k*N+1; normally the T dimension is not patchified. Update this if T patchification is needed
                     h = H // _H
                     w = W // _W
                     sequence_status["vae_data_mode"].append("online")
                 else:  # offline
                     # video_latent = video_tensor[0] # [[T, H, W, C]]
-                    sequence_status["vae_video_tensors"].append(video_tensor[0])  # video_tensor[0] 为tensor, [T, H, W, C]
-                    # 假设 video_latent 的形状为  [T, H, W, C]
+                    sequence_status["vae_video_tensors"].append(video_tensor[0])  # video_tensor[0] is a tensor with shape [T, H, W, C]
+                    # Assume video_latent has shape [T, H, W, C]
                     T, H, W, _ = video_tensor[0].shape
-                    _T, _H, _W = self.data_config.latent_patch_size  # NOTE: 仅包含了patchify的！
+                    _T, _H, _W = self.data_config.latent_patch_size  # NOTE: Only includes patchification
 
-                    t = T // _T  # k*N+1 一般t维度不做patchify!! 如果t维度要做patchify，写法需要更新
+                    t = T // _T  # k*N+1; normally the T dimension is not patchified. Update this if T patchification is needed
                     h = H // _H
                     w = W // _W
 
                     sequence_status["vae_data_mode"].append("offline")
 
-                spatial_merge_size = 2  # TODO：spatial_merge_size 一定是2吗？
+                spatial_merge_size = 2  # TODO: must spatial_merge_size always be 2?
                 vae_video_grid_thw = [
                     t,
                     h * spatial_merge_size,
                     w * spatial_merge_size,
-                 ]  # 因为Qwen-VL 中的rope 处理默认存在 /spatial_merge_size 的操作（与VIT处理匹配），所以对VAE 要额外进行*spatial_merge_size处理
+                 ]  # Qwen-VL RoPE divides by spatial_merge_size by default to match VIT processing, so VAE needs an extra multiply by spatial_merge_size
 
-                if EXP_HW_20250819: # HACK: 临时实验！！！
+                if EXP_HW_20250819: # HACK: temporary experiment
                     vae_video_grid_thw = [1, 2, 2]
 
                 sequence_status["vae_video_grid_thw"].append(vae_video_grid_thw)
                 curr_video_grid_thw.append(vae_video_grid_thw)
 
-                # 使用原生的 (t, h, w) latent shape
+                # Use the native (t, h, w) latent shape
                 sequence_status['vae_latent_shapes'].append((t, h, w))
 
-                # 使用3D感知的位置编码函数
+                # Use the 3D-aware position encoding function
                 if self.interpolate_pos:
-                    # 内插
+                    # Interpolation
                     packed_latent_position_ids = get_flattened_position_ids_interpolate_video(
-                        t, h, w, 1,  # latent space的patch size为1
+                        t, h, w, 1,  # Latent-space patch size is 1
                         max_num_frames=self.max_num_latent_frames,
                         max_num_patches_per_side=self.data_config.max_latent_size
                     )
                 else:
-                    # 外插
+                    # Extrapolation
                     packed_latent_position_ids = get_flattened_position_ids_extrapolate_video(
                         t, h, w,
                         max_latent_size=self.data_config.max_latent_size
@@ -664,7 +664,7 @@ class PackedDataset(torch.utils.data.IterableDataset):
                 if item["loss"] == 1:
                     pro_fbyf = False
                     if split_start:
-                        timestep = np.random.randn()  # NOTE: 外面会sigmoid一下
+                        timestep = np.random.randn()  # NOTE: A sigmoid is applied outside
 
                     frame_condition_idx = item.get("frame_condition_idx", [])
                     packed_timesteps = [timestep] * num_vid_tokens
@@ -675,7 +675,7 @@ class PackedDataset(torch.utils.data.IterableDataset):
                         if idx == -1:
                             idx = t - 1
                             if idx == 1:
-                                continue  # 如果帧数仅两帧跳过，避免所有帧均为条件帧相同
+                                continue  # Skip when there are only two frames to avoid using identical condition frames for all frames
                         frame_condition_indexes.extend(mse_loss_indexes[idx * h * w : (idx + 1) * h * w])
                         packed_timesteps[idx * h * w : (idx + 1) * h * w] = [-sys.float_info.max] * (h * w)
                     if frame_condition_idx:
@@ -698,7 +698,7 @@ class PackedDataset(torch.utils.data.IterableDataset):
                     curr_split_len += num_vid_tokens
                     sequence_status["packed_text_ids"].extend([self.image_token_id] * num_vid_tokens)
 
-                    # 添加 <|endofimage|> token
+                    # Add <|endofimage|> token
                     sequence_status['packed_text_ids'].append(self.end_of_image) # self.end_of_image=151653, <|vision_end|>
                     sequence_status['packed_text_indexes'].append(curr)
                     # <|endofimage|> may have loss
@@ -710,15 +710,15 @@ class PackedDataset(torch.utils.data.IterableDataset):
                     curr_split_len += 1
                     num_special_tokens += 1
 
-                    # 更新 sequence status
+                    # Update sequence status
                     if split_start:
-                        if item['loss'] == 1 and 'frame_delta' not in item.keys(): # frame_delta 是 for 多帧生成？
+                        if item['loss'] == 1 and 'frame_delta' not in item.keys(): # Is frame_delta for multi-frame generation?
                             attn_modes.append("noise")
                         else:
                             # attn_modes.append("full")
                             attn_modes.append("full_noise")
 
-                    sequence_status['packed_position_ids'].extend([curr_rope_id] * (num_vid_tokens + num_special_tokens)) # NOTE: 为什么rope固定？
+                    sequence_status['packed_position_ids'].extend([curr_rope_id] * (num_vid_tokens + num_special_tokens)) # NOTE: why is RoPE fixed?
                     if 'frame_delta' in item.keys():
                         curr_rope_id += item['frame_delta']
                     elif item['loss'] == 0:
@@ -738,24 +738,24 @@ class PackedDataset(torch.utils.data.IterableDataset):
                 apply_text_template = item.get('apply_text_template', False)
                 video_tensor = video_tensor_list.pop(0) # CTHW
                 if item['enable_cfg'] == 1 and random.random() < self.data_config.vit_cond_dropout_prob and not apply_text_template:
-                    # FIXME fix vae dropout in video2video setting. # TODO: 确认vit_video分支里面是否需要开启enablec_cfg?
+                    # FIXME: fix VAE dropout in video2video. TODO: confirm whether enable_cfg is needed in the vit_video branch
                     curr_rope_id += 1 # HACK ？？？？
                     continue
 
-                # 添加 <|startofimage|> token (视频与图像共用) TODO: 要将image和video的special token拆开嘛？
+                # Add <|startofimage|> token shared by video and image. TODO: split image and video special tokens?
                 if not apply_text_template:
                     sequence_status['packed_text_ids'].append(self.start_of_image) # 151652, <|vision_start|>
                     sequence_status['packed_text_indexes'].append(curr)
                     curr += 1
                     curr_split_len += 1
 
-                # 在线模式下，video_tensor 为tensor, 离线模式下，video_tensor 为list [latent]
+                # In online mode, video_tensor is a tensor; in offline mode, it is a list [latent]
                 if isinstance(video_tensor, torch.Tensor): # online
-                    sequence_status['vit_video_tensors'].append(video_tensor) # CTHW 原始的视频，非latent , 仅用于validation中的可视化
+                    sequence_status['vit_video_tensors'].append(video_tensor) # Raw CTHW video, not latent; used only for validation visualization
 
                     # preprocess video
                     vit_tokens = patchify_video_with_merge(video_tensor, self.data_config.vit_patch_size, self.data_config.vit_patch_size_temporal) # C T H W -> (T//2 * H//p * W//p) (p*p*2*C)
-                    num_video_tokens = vit_tokens.shape[0] // 4  # 实际上qwen2.5-vl还需要merge，2x2 merge成1个， hardcode for temp
+                    num_video_tokens = vit_tokens.shape[0] // 4  # Qwen2.5-VL also needs merging: 2x2 merges into 1, hardcoded temporarily
                     t, h, w = video_tensor.size(1), video_tensor.size(2), video_tensor.size(3)
 
                     sequence_status['packed_vit_tokens'].append(vit_tokens)
@@ -786,7 +786,7 @@ class PackedDataset(torch.utils.data.IterableDataset):
                     curr_video_grid_thw.append(vit_video_grid_thw)
 
                 sequence_status['vit_token_seqlens'].append(num_video_tokens)
-                sequence_status['packed_vit_position_ids'].append(torch.zeros(num_video_tokens)) # TODO : 不一定是 0 ？ 对于多个vit序列会有问题， 由于该变量目前仅在vit model:siglip 中使用，因此可忽略
+                sequence_status['packed_vit_position_ids'].append(torch.zeros(num_video_tokens)) # TODO: this may not always be 0; multiple VIT sequences may be problematic, but this is currently only used in vit model:siglip
 
                 if not apply_text_template:
                     sequence_status['packed_vit_token_indexes'].extend(range(curr, curr + num_video_tokens))
@@ -824,10 +824,10 @@ class PackedDataset(torch.utils.data.IterableDataset):
                     sample_lens += curr_split_len
 
         sequence_status['curr'] = curr
-        sequence_status['sample_lens'].append(sample_lens) # sample_lens 是一个pair的长度，比如 <text,video>
+        sequence_status['sample_lens'].append(sample_lens) # sample_lens is the length of a pair, e.g. <text, video>
         sequence_status['sample_type'].append(sample_type)
         sequence_status['sample_N_target'].append(sample_N_target)
-        sequence_status['video_grid_thw'].append(torch.tensor(curr_video_grid_thw)) #video_grid_thw 为 按sample 拆分的一个序列
+        sequence_status['video_grid_thw'].append(torch.tensor(curr_video_grid_thw)) # video_grid_thw is a sequence split by sample
         # prepare attention mask
         if not self.use_flex:
             sequence_status['nested_attention_masks'].append(
@@ -842,7 +842,7 @@ class PackedDataset(torch.utils.data.IterableDataset):
 
     def sample_pro(self, sample, sequence_status, batch_data_indexes, buffer, sample_from_buffer=False, skip_count=0):
 
-        num_tokens = sample['num_tokens'] + 2 * len(sample['sequence_plan']) # NOTE: 2*2 个特殊 tokens
+        num_tokens = sample['num_tokens'] + 2 * len(sample['sequence_plan']) # NOTE: 2*2 special tokens
         is_pro = False
         if num_tokens < self.max_num_tokens_per_sample and sequence_status['curr'] + num_tokens < self.max_num_tokens :
             sequence_status = self.pack_sequence(sample, sequence_status)
@@ -861,8 +861,8 @@ class PackedDataset(torch.utils.data.IterableDataset):
 
 
     def __iter__(self):
-        # NOTE: 核心逻辑：不停地调用 pack_sequence 进行多模态数据的打包
-        # 每次迭代时再创建底层数据集的迭代器（spawn/fork-safe）
+        # NOTE: Core logic repeatedly calls pack_sequence to pack multimodal data
+        # Create underlying dataset iterators at each iteration; spawn/fork safe
         self.dataset_iters = [iter(dataset) for dataset in self.grouped_datasets]
 
         total_weights = sum(self.grouped_weights)
@@ -888,7 +888,7 @@ class PackedDataset(torch.utils.data.IterableDataset):
                                 data_type_pro.remove(self.data_type[group_index])
                             if is_pro:
                                 break
-            if self.require_und_gen and 'x2t' in self.data_type  and 'x2v' in self.data_type: # NOTE：在 und + gen 联合训练时，如果部分sequence 仅包含单一样本会导致通信失败
+            if self.require_und_gen and 'x2t' in self.data_type  and 'x2v' in self.data_type: # NOTE: In joint UND + GEN training, sequences with only one sample may cause communication failures
                 while True:
                     if data_type_pro == []:
                         break
@@ -901,10 +901,10 @@ class PackedDataset(torch.utils.data.IterableDataset):
                         if is_pro:
                             data_type_pro.remove(self.data_type[group_index])
 
-                    if skip_count >= max_skips_before_reset: # NOTE：如果连续skip 30 个样本，跳出循环并重置 sequence_status
+                    if skip_count >= max_skips_before_reset: # NOTE: If 30 samples are skipped consecutively, break and reset sequence_status
                         break
 
-            if  skip_count >= max_skips_before_reset: # 重置 sequence_status
+            if  skip_count >= max_skips_before_reset: # Reset sequence_status
                 self.logger.info(f"Too many skips ({skip_count}), resetting sequence_status")
                 sequence_status = self.set_sequence_status()
                 batch_data_indexes = []
@@ -942,7 +942,7 @@ class PackedDataset(torch.utils.data.IterableDataset):
                     data['batch_data_indexes'] = batch_data_indexes
                     data_type_pro = ['x2t', 'x2v']
                     yield data
-                    # yield 后要重制sequence_status
+                    # Reset sequence_status after yield
                     sequence_status = self.set_sequence_status()
                     batch_data_indexes = []
                 continue
@@ -955,7 +955,7 @@ class PackedDataset(torch.utils.data.IterableDataset):
                 data['batch_data_indexes'] = batch_data_indexes
                 data_type_pro = ['x2t', 'x2v']
                 yield data
-                # yield 后要重制sequence_status
+                # Reset sequence_status after yield
                 sequence_status = self.set_sequence_status()
                 batch_data_indexes = []
 
@@ -993,6 +993,6 @@ def collate_wrapper():
         return SimpleCustomBatch(batch)
     return collate_fn
 
-# 顶层函数（可被 pickle）
+# Top-level function; pickleable
 def simple_custom_collate(batch):
     return SimpleCustomBatch(batch)

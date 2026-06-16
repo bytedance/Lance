@@ -50,7 +50,7 @@ class X2TInterleaveLocalIterableDataset(X2TInterleaveIterableDataset):
         self.num_files_per_rank = len(data_paths)
 
     def __iter__(self):
-        self.lazy_init_clients()
+        # self.lazy_init_clients()
         if not hasattr(self, "data_paths_per_rank"):
             self.set_epoch(self.seed)
 

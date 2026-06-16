@@ -35,7 +35,7 @@ from modeling.lance.qwen2_navit import (
 from common.utils.fs import mkdir, is_hdfs_path, copy, exists
 from common.utils.save import get_local_dir, save
 
-# 在文件顶部添加以下代码来忽略指定的FutureWarning
+# Ignore the specific FutureWarning at module import time
 warnings.filterwarnings(
     "ignore",
     category=FutureWarning,
@@ -132,7 +132,7 @@ def fsdp_wrapper(original_model, fsdp_config: FSDPConfig, ignored_modules=[], mi
     mp = mixed_precision_override or MixedPrecision(
         param_dtype=torch.bfloat16,
         reduce_dtype=torch.bfloat16,
-        # reduce_dtype=torch.float32, # TODO: 改成torch.float32 会把bfloat16->float32
+        # reduce_dtype=torch.float32, # TODO: using torch.float32 converts bfloat16 to float32
         buffer_dtype=torch.bfloat16,
     )
 
@@ -177,16 +177,16 @@ class FSDPCheckpoint:
         if fsdp_config.sharding_strategy == "HYBRID_SHARD":
             assert world == fsdp_config.num_shard * fsdp_config.num_replicate, f"world={world} != shard({fsdp_config.num_shard})*replicate({fsdp_config.num_replicate})"
 
-        # ---- 0) 若是 HDFS 目标，把 DCP 的输出先写到本地临时目录，再整体拷贝 ----
+        # ---- 0) For HDFS targets, write DCP output to a local temp directory first, then copy it back ----
         dcp_root = save_path
         if is_hdfs_path(save_path):
             dcp_root = osp.join(get_local_dir(), osp.basename(save_path))
             os.makedirs(dcp_root, exist_ok=True)
 
         # ---- 1) save sharded via DCP ----
-        if kwargs.get("flag_save_shard_model", False):  # 是否保存shard model
+        if kwargs.get("flag_save_shard_model", False):  # Whether to save the sharded model
             # ---- 1.1) EMA (sharded via DCP) ----
-            if ema_model is not None:  # NOTE: ema_model 暂时为 None
+            if ema_model is not None:  # NOTE: ema_model is currently None
                 with FSDP.state_dict_type(
                     ema_model,
                     StateDictType.SHARDED_STATE_DICT,
@@ -209,16 +209,16 @@ class FSDPCheckpoint:
             __barrier__()
 
         # ---- 2) Model FULL ----
-        if kwargs.get("flag_save_full_model", True): # 是否保存full model
+        if kwargs.get("flag_save_full_model", True): # Whether to save the full model
             # ---- 2.1) EMA Model FULL ----
             if ema_model is not None:
                 with FSDP.state_dict_type(ema_model, StateDictType.FULL_STATE_DICT, FullStateDictConfig(rank0_only=True, offload_to_cpu=True)):
                     sd = ema_model.state_dict()
 
-                    __barrier__()  # 👈 关键：在 FULL 上下文内先同步一次
+                    __barrier__()  # Synchronize once inside the FULL context
 
                     if rank == 0:
-                        # （可选）contiguous 处理
+                        # Optional contiguous conversion
                         for k, v in list(sd.items()):
                             if isinstance(v, torch.Tensor) and not v.is_contiguous():
                                 sd[k] = v.contiguous()
@@ -230,20 +230,20 @@ class FSDPCheckpoint:
                 import gc; gc.collect(); torch.cuda.empty_cache()
 
             # ---- 2.2) Model FULL ----
-            # NOTE: 已确认保存的模型finetune loss正常，2025.08.21，✅
+            # NOTE: Saved model fine-tuning loss was verified on 2025-08-21
             with FSDP.state_dict_type(model, StateDictType.FULL_STATE_DICT, FullStateDictConfig(rank0_only=True, offload_to_cpu=True)):
-                sd = model.state_dict()  # 注意：即使 rank0-only，所有 rank 也必须调 state_dict() 参与集体通信
+                sd = model.state_dict()  # Even with rank0-only, all ranks must call state_dict() for collective communication
 
-                __barrier__()  # 👈 关键：在 FULL 上下文内先同步一次
+                __barrier__()  # Synchronize once inside the FULL context
 
                 if rank == 0:
-                    # （可选）contiguous 处理
+                    # Optional contiguous conversion
                     for k, v in list(sd.items()):
                         if isinstance(v, torch.Tensor) and not v.is_contiguous():
                             sd[k] = v.contiguous()
                     save(sd, osp.join(save_path, "model.safetensors"), blocking=blocking, local_dir=local_save_dir)
 
-                __barrier__() # 关键补丁：在 FULL 上下文内同步一次，避免非 rank0 过早退出 context
+                __barrier__() # Synchronize inside the FULL context so non-rank0 processes do not exit too early
 
             del sd
             import gc; gc.collect(); torch.cuda.empty_cache()
@@ -252,7 +252,7 @@ class FSDPCheckpoint:
         __barrier__()
 
         # --- 3) If target is HDFS, copy sharded dirs up ---
-        if is_hdfs_path(save_path):  # NOTE: 因为用dcp存的，所有需要额外拷贝；若未保存切片，则不会进行拷贝
+        if is_hdfs_path(save_path):  # NOTE: DCP output needs an extra copy step; skip if sharded checkpoints were not saved
             for sub in ("model", "ema"):
                 src = osp.join(dcp_root, sub)
                 if os.path.exists(src):
@@ -260,7 +260,7 @@ class FSDPCheckpoint:
                     logger.info(f"Copy {src} to HDFS or Local path: {save_path} done.")
 
         # ---- 3) Optimizer (sharded via DCP) ----
-        if kwargs.get("flag_save_optimizer", True): # 是否保存 optimizer，默认保存以支持完整 resume
+        if kwargs.get("flag_save_optimizer", True): # Whether to save the optimizer; enabled by default for full resume
             # Determine shard file name (keeps your original convention)
             if fsdp_config.sharding_strategy == "FULL_SHARD":
                 shard_index = rank
@@ -310,7 +310,7 @@ class FSDPCheckpoint:
 
     @staticmethod
     def try_load_ckpt(resume_from, logger, model, ema_model=None, resume_from_ema=False, report_dir=None):
-        # TODO: 待check！
+        # TODO: verify this
         if resume_from is not None and osp.exists(resume_from):
             logger.info(f"Loading checkpoint from {resume_from}.")
             if resume_from_ema:
@@ -347,7 +347,7 @@ class FSDPCheckpoint:
 
     @staticmethod
     def try_load_fsdp_ckpt(resume_from, logger, model, ema_model=None, resume_from_ema=False, report_dir=None):
-        # TODO: 待check！
+        # TODO: verify this
         if resume_from is None or not os.path.exists(resume_from):
             logger.info("Training from scratch.")
             return model, ema_model
@@ -470,7 +470,7 @@ def fsdp_ema_update(ema_model, model, decay=0.9999):
     torch._foreach_add_(ema_params, new_params, alpha=1 - decay)
 
 
-# =============================================== 在CPU做EMA的相关实现，待验证（未调试成功） =====================================================
+# =============================================== CPU EMA implementation, pending verification =====================================================
 def fsdp_ema_setup_v2(ema_model, fsdp_config, ignored_modules=[], backend="fsdp_cpu_offload"):
     ema_model.eval()
     for param in ema_model.parameters():
@@ -479,11 +479,11 @@ def fsdp_ema_setup_v2(ema_model, fsdp_config, ignored_modules=[], backend="fsdp_
     if backend == "none_cpu_plain":
         return ema_model.cpu()
 
-    # 默认：FSDP 包裹，但强制 offload 到 CPU（显存≈0）
+    # Default: wrap with FSDP, but force CPU offload so GPU memory use is near zero
     ema_cfg = FSDPConfig(
         sharding_strategy=fsdp_config.sharding_strategy,
         backward_prefetch=fsdp_config.backward_prefetch,
-        cpu_offload=True,  # 关键
+        cpu_offload=True,  # Key setting
         num_replicate=fsdp_config.num_replicate,
         num_shard=fsdp_config.num_shard,
         use_orig_params=fsdp_config.use_orig_params,
@@ -504,7 +504,7 @@ def fsdp_ema_update_v2(ema_model, model, decay=0.9999):
 
     for ema_handle, new_handle in zip(ema_handles, new_handles):
         if ema_handle.flat_param is not None and new_handle.flat_param.requires_grad:
-            # EMA 常驻 CPU：确保 new_params 也在 CPU，再做 foreach
+            # EMA stays on CPU: ensure new_params are also on CPU before foreach ops
             ema_params.append(ema_handle.flat_param.data)  # CPU
             new_params.append(new_handle.flat_param.data.to(device="cpu", dtype=ema_handle.flat_param.dtype, non_blocking=True))
 

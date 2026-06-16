@@ -39,9 +39,9 @@ echo "NUM_REPLICATE: $NUM_REPLICATE"
 echo "NUM_SHARD: $NUM_SHARD"
 
 # ==============================模型与初始化配置==============================
-LLM_PATH=./downloads/Qwen2.5-VL-3B-Instruct
+LLM_PATH=downloads/Lance_3B_Video/ #llm_config.json
 VIT_PATH=./downloads/Qwen2.5-VL-ViT
-MODEL_PATH=./downloads/lance_3b_video
+MODEL_PATH=./downloads/lance_3B_Video
 VIT_TYPE="qwen_2_5_vl_original"
 
 LOAD_FROM_LANCE_CHECKPOINT=True

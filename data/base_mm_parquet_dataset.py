@@ -149,9 +149,10 @@ class BaseMMParquetDataset(DistributedIterableDataset, ABC):
 
         return None
 
-    def lazy_init_clients(self):
-        """Compatibility hook. Local parquet training does not initialize remote clients."""
-        return
+    # def lazy_init_clients(self):
+    #     """可选：延迟初始化（如 TOS 客户端/解码器等）。"""
+    #     if getattr(self, "tos_cli", None) is None:
+    #         self.tos_cli = TosWrapper()
 
     @staticmethod
     def _read_decord(video: VideoReader, frame_idx: List[int]) -> List[Image.Image]:
@@ -398,7 +399,7 @@ class BaseMMParquetDataset(DistributedIterableDataset, ABC):
         pass
 
     def __iter__(self) -> Iterator[Dict[str, Any]]:
-        self.lazy_init_clients()
+        # self.lazy_init_clients()
 
         data_paths_per_worker, worker_id = self.get_data_paths_per_worker()
         if self.data_status is not None:

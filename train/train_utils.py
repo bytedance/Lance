@@ -108,15 +108,24 @@ def setup_rank0_logging_and_wandb(
 def prepare_model_paths(model_args: ModelArguments, training_args: TrainingArguments):
     if training_args.load_from_lance_checkpoint:
         model_args.model_path = download(model_args.model_path, add_hash_suffix=True)
-        filename_lst = ["config.json", "generation_config.json", "merges.txt", "tokenizer.json", "tokenizer_config.json", "vocab.json"]
-        dirname = os.path.split(model_args.model_path)[0] if os.path.isfile(model_args.model_path) else model_args.model_path
-        for filename_src in filename_lst:
-            filename_tgt = "llm_config.json" if filename_src.lower() == "config.json" else filename_src
-            download(
-                path=os.path.join(model_args.llm_path, filename_src),
-                dirname=dirname,
-                filename=filename_tgt,
-                add_hash_suffix=False,
+        required_files = [
+            "llm_config.json",
+            "generation_config.json",
+            "merges.txt",
+            "tokenizer.json",
+            "tokenizer_config.json",
+            "vocab.json",
+        ]
+        missing_files = [
+            filename
+            for filename in required_files
+            if not os.path.exists(os.path.join(model_args.model_path, filename))
+        ]
+        if missing_files:
+            raise FileNotFoundError(
+                "MODEL_PATH must contain all Lance LLM/tokenizer files when "
+                f"load_from_lance_checkpoint=True. Missing in {model_args.model_path}: "
+                f"{', '.join(missing_files)}"
             )
     else:
         model_args.llm_path = download(model_args.llm_path)

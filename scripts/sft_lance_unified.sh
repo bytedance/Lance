@@ -39,9 +39,8 @@ echo "NUM_REPLICATE: $NUM_REPLICATE"
 echo "NUM_SHARD: $NUM_SHARD"
 
 # ==============================模型与初始化配置==============================
-LLM_PATH=./downloads/Qwen2.5-VL-3B-Instruct
 VIT_PATH=./downloads/Qwen2.5-VL-ViT
-MODEL_PATH=./downloads/lance_3b_video
+MODEL_PATH=./downloads/Lance_3B_Video
 VIT_TYPE="qwen_2_5_vl_original"
 
 LOAD_FROM_LANCE_CHECKPOINT=True
@@ -137,7 +136,6 @@ accelerate launch \
     --mixed_precision                           bf16 \
     train/unified_train.py \
     --model_path                                $MODEL_PATH \
-    --llm_path                                  $LLM_PATH \
     --vit_path                                  $VIT_PATH \
     --vit_type                                  $VIT_TYPE \
     --llm_qk_norm                               $LLM_QK_NORM \

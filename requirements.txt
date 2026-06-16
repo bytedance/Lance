@@ -1,9 +1,7 @@
 accelerate==1.13.0
-byted-wandb==0.13.87
 decord==0.6.0
 diffusers==0.29.1
 einops==0.8.1
-flash-attn==2.8.3
 fsspec==2026.4.0
 gradio==5.31.0
 gradio-client==1.10.1
@@ -36,3 +34,4 @@ torchvision==0.23.0+cu126
 tqdm==4.67.3
 transformers==4.49.0
 transformers-stream-generator==0.0.5
+wandb

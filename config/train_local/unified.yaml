@@ -9,7 +9,7 @@ D1:
   dataset_names:
     local_100:
       data_dir:
-        - datasets/text2imgae/local_256.parquet
+        - datasets/text2image/local_256.parquet
   debug_parquet_repeat: 256  # debug option for quick smoke tests on small local datasets
 
   video_transform_args:

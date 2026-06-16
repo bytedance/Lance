@@ -27,13 +27,13 @@ These are the parameters you should verify before most runs. Think of them as th
 | Parameter | Purpose | When to change | Recommendation |
 | --- | --- | --- | --- |
 | `DATASET_CONFIG_FILE` | Specifies the training dataset yaml | Almost every run | Point it to the dataset config you actually want to train |
-| `VAL_DATASET_CONFIG_FILE` | Specifies the validation dataset yaml | Mainly when validation is enabled | Usually the same as the training config, or a dedicated validation config |
+| `VAL_DATASET_CONFIG_FILE` | Specifies the validation dataset yaml | Validation is currently not supported | Keep the default value |
 | `WANDB_NAME` | Names the experiment | Almost every run | Include task name, dataset name, and date |
 | `VISUAL_UND` | Enables the visual understanding branch | Usually not changed often | Keep `True` for understanding tasks and most generation tasks |
 | `VISUAL_GEN` | Enables the visual generation branch | Must be checked when switching between understanding and generation | Set `False` for understanding tasks, `True` for generation tasks |
 | `SAVE_EVERY` | Checkpoint save interval | Commonly changed in both debug and formal runs | Smaller for debugging, larger for long runs |
 | `CKPT_DEBUG_STEPS` | Very early debug checkpoint | Commonly changed during debugging | Set to `-1` if you do not need early debug checkpoints |
-| `VALIDATION_STEP` | Validation interval | Only relevant if validation is enabled | `-1` means no validation; a positive integer means validate every N steps |
+| `VALIDATION_STEP` | Validation interval | Validation is currently not supported | Keep `-1`; do not set it to a positive integer |
 | `NUM_SHARD` | Number of FSDP shards | When changing the parallelism strategy | Tune together with GPU count and memory budget |
 | `NUM_REPLICATE` | Number of replicas | Usually changes with `NUM_SHARD` | Computed as `TOTAL_RANK / NUM_SHARD` |
 
@@ -67,13 +67,7 @@ This means:
 - no fixed validation dataset is prepared
 - `validate_on_fixed_batch(...)` is never triggered in the training loop
 
-If you want validation, set it to a positive integer, for example:
-
-```bash
-VALIDATION_STEP=100
-```
-
-which means validating every 100 steps.
+The validation logic in the training script has not been fully checked yet. Enabling validation with a positive value is currently not supported, so do not set values such as `VALIDATION_STEP=100`; keep it as `-1`.
 
 
 ## 4. Common Launch Patterns

@@ -26,13 +26,13 @@
 | 参数 | 作用 | 什么时候改 | 建议 |
 | --- | --- | --- | --- |
 | `DATASET_CONFIG_FILE` | 指定训练集 yaml | 基本每次都会改 | 改成你这次真正要训练的数据配置 |
-| `VAL_DATASET_CONFIG_FILE` | 指定验证集 yaml | 需要验证时才重点改 | 通常与训练集相同；不验证时影响较小 |
+| `VAL_DATASET_CONFIG_FILE` | 指定验证集 yaml | 当前验证暂不支持 | 保留默认值即可 |
 | `WANDB_NAME` | 区分实验名 | 基本每次都会改 | 带上任务名、数据集名、日期 |
 | `VISUAL_UND` | 是否启用视觉理解分支 | 一般不常改 | 理解任务和大多数生成任务都保持 `True` |
 | `VISUAL_GEN` | 是否启用视觉生成分支 | 理解/生成切换时必须确认 | 理解任务设 `False`，生成任务设 `True` |
 | `SAVE_EVERY` | checkpoint 保存间隔 | 调试和正式训练都常改 | 调试时可小；正式训练建议调大 |
 | `CKPT_DEBUG_STEPS` | 很早期的调试保存 | 调试时常改 | 不需要时建议设为 `-1` |
-| `VALIDATION_STEP` | 验证间隔 | 需要验证时才改 | `-1` 表示不验证；正整数表示每隔若干 step 验证一次 |
+| `VALIDATION_STEP` | 验证间隔 | 当前验证暂不支持 | 保持 `-1`，不要设置为正整数 |
 | `NUM_SHARD` | FSDP shard 数 | 改并行策略时改 | 和 GPU 数、显存规划一起看 |
 | `NUM_REPLICATE` | replicate 数 | 一般随 `NUM_SHARD` 自动变化 | 由 `TOTAL_RANK / NUM_SHARD` 得到 |
 
@@ -66,13 +66,7 @@ VALIDATION_STEP=-1
 - 不准备固定验证集
 - 训练循环里不触发 `validate_on_fixed_batch(...)`
 
-如果要验证，把它改成正整数，例如：
-
-```bash
-VALIDATION_STEP=100
-```
-
-表示每 100 step 做一次验证。
+当前训练脚本的 validation 逻辑还没有完成检查，暂不支持通过正整数启用验证。因此不要设置 `VALIDATION_STEP=100` 这类值，保持 `-1`。
 
 
 ## 4. 最常见的启动方式

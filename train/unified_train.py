@@ -207,7 +207,7 @@ def main():
 
     if training_args.validation_step > 0:
         log_rank0(
-            f"validation_step={training_args.validation_step}, but validation is not implemented yet in train/unified_train.py. Skip validation."
+            f"validation_step={training_args.validation_step}, but validation is currently disabled in train/unified_train.py. Skip validation."
         )
         training_args.validation_step = -1
 
@@ -254,6 +254,8 @@ def main():
     progress_bar = tqdm(total=training_args.total_steps, initial=train_step, disable=not GLOBAL_RANK == 0, desc="Training")
 
     for curr_step, data in enumerate(train_loader, start=train_step):
+        if curr_step >= training_args.total_steps:
+            break
         try:
             data = data.cuda(DEVICE).to_dict()
             data_indexes = data.pop("batch_data_indexes", None)

@@ -25,3 +25,5 @@ gradio==5.31.0
 spaces==0.50.2
 sk-video
 openai==2.26.0
+pyarrow
+wandb

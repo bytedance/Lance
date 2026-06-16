@@ -34,6 +34,4 @@ temps/
 datasets/
 
 # 
-config/train_online
-data/internal_data_utils/configs
 outputs/

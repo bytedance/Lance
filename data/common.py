@@ -4,7 +4,6 @@ import json
 import torch
 import random
 import io
-from data.tos import TosWrapper
 from einops import rearrange
 from typing import List
 import torch.nn.functional as F
@@ -300,7 +299,7 @@ def concat_pad_tensor_list(video_latents: List[torch.Tensor], dim: int = 0, pad_
     return padded_video_latents
 
 
-def dump_url_to_latent(url: str, tos_cli: TosWrapper):
+def dump_url_to_latent(url: str, tos_cli):
     mean_and_logvar = torch.load(io.BytesIO(tos_cli.get_obj(url)), map_location="cpu")
     mean_and_logvar = rearrange(mean_and_logvar, "t h w c -> c t h w")
     u, log_var = mean_and_logvar.chunk(2, dim=0)  # [c t h w]
@@ -343,7 +342,7 @@ def dump_data(properties, element_dtype_array, interleave_array, res_dump, tos_c
     return interleave_array
 
 
-def parse_caption_audio_human(video_meta_url: str, tos_cli: TosWrapper):
+def parse_caption_audio_human(video_meta_url: str, tos_cli):
     """
     解析 caption 数组，并将 en 和 zh 的信息分别存入独立的键中。
     """
@@ -387,7 +386,7 @@ def parse_caption_live_vertical(caption_array):
     return caption
 
 
-def parse_caption_vertical_dump(video_meta_url: str, tos_cli: TosWrapper, res_dump: str):  # 可以作为 dump 数据的 统一处理
+def parse_caption_vertical_dump(video_meta_url: str, tos_cli, res_dump: str):  # 可以作为 dump 数据的 统一处理
     """
     res_dump 为分辨率， 类似 "12fps_192p", "12fps_480p", "fixed25_360p", "fixed25_480p"
     """
@@ -422,7 +421,7 @@ def parse_caption_vertical_dump(video_meta_url: str, tos_cli: TosWrapper, res_du
     return latents, vit_tensor, caption, vit_shape
 
 
-def parse_caption_vertical_online(video_meta_url: str, tos_cli: TosWrapper):  # 可以作为 dump 数据的 统一处理
+def parse_caption_vertical_online(video_meta_url: str, tos_cli):  # 可以作为 dump 数据的 统一处理
     video_meta = json.loads(tos_cli.get_obj_by_url(video_meta_url))
     url = json.loads(video_meta["element_meta_array"][0])["original_path"]
     properties = video_meta["properties"]
@@ -436,7 +435,7 @@ def parse_caption_vertical_online(video_meta_url: str, tos_cli: TosWrapper):  # 
     return url, caption
 
 
-def parse_caption_llava(video_meta_url: str, tos_cli: TosWrapper):  # 可以作为 dump 数据的 统一处理
+def parse_caption_llava(video_meta_url: str, tos_cli):  # 可以作为 dump 数据的 统一处理
     video_meta = json.loads(tos_cli.get_obj_by_url(video_meta_url))
     properties = video_meta["properties"]
     conversations = json.loads(properties["conversations"])
@@ -459,7 +458,7 @@ def parse_caption_llava(video_meta_url: str, tos_cli: TosWrapper):  # 可以作�
 
     return interleave_array, element_dtype_array
 
-def parse_caption_nemotron(video_meta_url: str, tos_cli: TosWrapper):  # 可以作为 dump 数据的 统一处理
+def parse_caption_nemotron(video_meta_url: str, tos_cli):  # 可以作为 dump 数据的 统一处理
     video_meta = json.loads(tos_cli.get_obj_by_url(video_meta_url))
 
     QA_i = "Read the text attentively and provide an appropriate response."
@@ -472,7 +471,7 @@ def parse_caption_nemotron(video_meta_url: str, tos_cli: TosWrapper):  # 可以�
     return interleave_array, element_dtype_array
 
 
-def parse_caption_vfm_action_clips_online(video_meta_url: str, tos_cli: TosWrapper, caption_key: str):  # 可以作为 dump 数据的 统一处理
+def parse_caption_vfm_action_clips_online(video_meta_url: str, tos_cli, caption_key: str):  # 可以作为 dump 数据的 统一处理
     video_meta = json.loads(tos_cli.get_obj_by_url(video_meta_url))
     url = video_meta["interleave_array"][0]
     properties = video_meta["properties"]
@@ -482,7 +481,7 @@ def parse_caption_vfm_action_clips_online(video_meta_url: str, tos_cli: TosWrapp
 
     return url, caption
 
-def parse_caption_vfm_action_clips_dump(video_meta_url: str, tos_cli: TosWrapper, caption_key: str, res_dump: str):  # 可以作为 dump 数据的 统一处理
+def parse_caption_vfm_action_clips_dump(video_meta_url: str, tos_cli, caption_key: str, res_dump: str):  # 可以作为 dump 数据的 统一处理
     """
     res_dump 为分辨率， 类似 "12fps_192p", "12fps_480p", "fixed25_360p", "fixed25_480p"
     """
@@ -525,7 +524,7 @@ def parse_caption_vfm_action_clips_dump(video_meta_url: str, tos_cli: TosWrapper
 
     return latents, vit_tensor, caption, vit_shape
 
-def parse_caption_dreamedit(video_meta_url: str, tos_cli: TosWrapper):
+def parse_caption_dreamedit(video_meta_url: str, tos_cli):
     video_meta = json.loads(tos_cli.get_obj_by_url(video_meta_url))
     interleave_array = video_meta["interleave_array"]
     element_dtype_array = video_meta["element_dtype_array"]
@@ -550,7 +549,7 @@ def parse_caption_dreamedit(video_meta_url: str, tos_cli: TosWrapper):
     return interleave_array, element_dtype_array
 
 
-def parse_caption_dreamO(video_meta_url: str, tos_cli: TosWrapper):
+def parse_caption_dreamO(video_meta_url: str, tos_cli):
     video_meta = json.loads(tos_cli.get_obj_by_url(video_meta_url))
     interleave_array = video_meta["interleave_array"]
     element_dtype_array = video_meta["element_dtype_array"]
@@ -583,7 +582,7 @@ def parse_caption_dreamO(video_meta_url: str, tos_cli: TosWrapper):
     return interleave_array, element_dtype_array
 
 
-def parse_caption_ocr(video_meta_url: str, tos_cli: TosWrapper, data_filter: dict):
+def parse_caption_ocr(video_meta_url: str, tos_cli, data_filter: dict):
     video_meta = json.loads(tos_cli.get_obj_by_url(video_meta_url))
     condition_text = video_meta["properties"]["recaption"]
 
@@ -606,7 +605,7 @@ def parse_caption_ocr(video_meta_url: str, tos_cli: TosWrapper, data_filter: dic
 
 
 def parse_caption_video_idip_online(
-    video_meta_url: str, tos_cli: TosWrapper, res_dump: list = ["12fps_192p"], caption_key: str = "", dataset_type: str = ""
+    video_meta_url: str, tos_cli, res_dump: list = ["12fps_192p"], caption_key: str = "", dataset_type: str = ""
 ):  # 可以作为 dump 数据的 统一处理
     video_meta = json.loads(tos_cli.get_obj_by_url(video_meta_url))
     element_dtype_array = video_meta["element_dtype_array"]
@@ -698,7 +697,7 @@ def parse_caption_video_idip_online(
 
 
 def parse_vfm_videos_and_clips_join(
-    video_meta_url: str, video_unimodel_url: str, tos_cli: TosWrapper, res_dump: list = ["12fps_192p"], caption_key: str = "", dataset_type: str = ""
+    video_meta_url: str, video_unimodel_url: str, tos_cli, res_dump: list = ["12fps_192p"], caption_key: str = "", dataset_type: str = ""
 ):  # 可以作为 dump 数据的 统一处理
     video_meta = json.loads(tos_cli.get_obj_by_url(video_meta_url))
     element_dtype_array = video_meta["element_dtype_array"]
@@ -728,7 +727,7 @@ def parse_vfm_videos_and_clips_join(
 
 
 def parse_caption_video_maze(
-    video_meta_url: str, tos_cli: TosWrapper, res_dump: list = ["12fps_192p"], caption_key: str = "", dataset_type: str = ""
+    video_meta_url: str, tos_cli, res_dump: list = ["12fps_192p"], caption_key: str = "", dataset_type: str = ""
 ):  # 可以作为 dump 数据的 统一处理
     video_meta = json.loads(tos_cli.get_obj_by_url(video_meta_url))
     if int(video_meta["properties"]["path_length"]) < 10 and random.random() < 0.5:  # 按0.5 的比例 过滤掉路径长度小于10的视频
@@ -749,7 +748,7 @@ def parse_caption_video_maze(
 
     return interleave_array, element_dtype_array
 
-def parse_vfm_videos(video_meta_url: str, tos_cli: TosWrapper, res_dump: list = ["12fps_192p"], caption_key: str = "", dataset_type: str = ""):  # 可以作为 dump 数据的 统一处理
+def parse_vfm_videos(video_meta_url: str, tos_cli, res_dump: list = ["12fps_192p"], caption_key: str = "", dataset_type: str = ""):  # 可以作为 dump 数据的 统一处理
     video_meta = json.loads(tos_cli.get_obj_by_url(video_meta_url))
     element_dtype_array = video_meta["element_dtype_array"]
     interleave_array = video_meta["interleave_array"]
@@ -787,7 +786,7 @@ def parse_vfm_videos(video_meta_url: str, tos_cli: TosWrapper, res_dump: list = 
     return interleave_array, element_dtype_array
 
 
-def parse_videochat2it(video_meta_url: str, tos_cli: TosWrapper, res_dump: list = ["12fps_192p"], caption_key: str = "", dataset_type: str = ""):  # 可以作为 dump 数据的 统一处理
+def parse_videochat2it(video_meta_url: str, tos_cli, res_dump: list = ["12fps_192p"], caption_key: str = "", dataset_type: str = ""):  # 可以作为 dump 数据的 统一处理
     video_meta = json.loads(tos_cli.get_obj_by_url(video_meta_url))
     element_dtype_array = video_meta["element_dtype_array"]
     interleave_array = video_meta["interleave_array"]
@@ -814,7 +813,7 @@ def parse_videochat2it(video_meta_url: str, tos_cli: TosWrapper, res_dump: list 
     return interleave_array, element_dtype_array
 
 
-def parse_caption_mmpr(video_meta_url: str, tos_cli: TosWrapper):  # 可以作为 dump 数据的 统一处理
+def parse_caption_mmpr(video_meta_url: str, tos_cli):  # 可以作为 dump 数据的 统一处理
     video_meta = json.loads(tos_cli.get_obj_by_url(video_meta_url))
     #print('video_meta',video_meta)
     properties = video_meta["properties"]

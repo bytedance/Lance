@@ -11,7 +11,6 @@ from io import BytesIO
 import torch
 from data.datasets_factory.distributed_iterable_dataset import DistributedIterableDataset
 from data.parquet_utils import init_arrow_pf_fs, read_parquet_rows
-from data.tos import TosWrapper
 from data.transforms import VideoTransform
 from common.utils.logging import get_logger
 import decord
@@ -94,7 +93,6 @@ class BaseMMParquetDataset(DistributedIterableDataset, ABC):
 
         # 标记：还没初始化过
         self.data_paths = kwargs.get('all_data_paths')
-        self.tos_cli = None
         self.cpu_count = os.cpu_count() or 1
 
         self.apply_chat_template = kwargs.get('apply_chat_template', False)
@@ -152,9 +150,8 @@ class BaseMMParquetDataset(DistributedIterableDataset, ABC):
         return None
 
     def lazy_init_clients(self):
-        """可选：延迟初始化（如 TOS 客户端/解码器等）。"""
-        if getattr(self, "tos_cli", None) is None:
-            self.tos_cli = TosWrapper()
+        """Compatibility hook. Local parquet training does not initialize remote clients."""
+        return
 
     @staticmethod
     def _read_decord(video: VideoReader, frame_idx: List[int]) -> List[Image.Image]:
@@ -174,7 +171,7 @@ class BaseMMParquetDataset(DistributedIterableDataset, ABC):
             raise ValueError(f"Unknown vision_stream: {self.vision_stream}")
 
     def get_thwc_url_new(self, media_url, worker_id):
-        video_stream = BytesIO(self.tos_cli.get_obj_by_url(media_url))
+        raise NotImplementedError("Remote media URLs are not supported. Use local parquet rows with embedded bytes.")
 
         video_reader = VideoReader(video_stream, ctx=decord.cpu(worker_id % self.cpu_count))
         total_frames = len(video_reader)
@@ -234,7 +231,7 @@ class BaseMMParquetDataset(DistributedIterableDataset, ABC):
             # with open(f"saved_video_{timestamp}.mp4", "wb") as f:
             #     f.write(video_stream.getvalue())  # video_stream 是包含视频bytes的BytesIO对象
         else:
-            video_stream = BytesIO(self.tos_cli.get_obj_by_url(media_url))
+            raise NotImplementedError("Remote media URLs are not supported. Use raw_bytes_input=True with local parquet bytes.")
 
         if self.is_image and element_dtype == "image":
             image = Image.open(video_stream)

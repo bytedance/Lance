@@ -18,9 +18,14 @@ Generic parquet/data file helpers that do not depend on cluster-specific setting
 """
 
 import os
-from typing import Callable, Iterable, List, Optional
+import logging
+from typing import Iterable, List, Optional
 
 import pyarrow.fs as pf
+import torch.distributed as dist
+
+
+logger = logging.getLogger(__name__)
 
 
 SUPPORTED_DATA_EXTENSIONS = (".parquet", ".json", ".jsonl")
@@ -51,24 +56,35 @@ def list_local_supported_data_files(data_dir: str) -> List[str]:
     return select_supported_files(files)
 
 
-def init_arrow_fs(parquet_file_path: str, remote_fs_factory: Optional[Callable[[], pf.FileSystem]] = None) -> pf.FileSystem:
+def init_arrow_fs(parquet_file_path: str) -> pf.FileSystem:
     if parquet_file_path.startswith("hdfs://"):
-        if remote_fs_factory is None:
-            raise ValueError(f"Remote parquet path requires a filesystem factory: {parquet_file_path}")
-        return remote_fs_factory()
+        raise ValueError(f"Only local parquet files are supported, got remote path: {parquet_file_path}")
     return pf.LocalFileSystem()
 
 
 def init_arrow_pf_fs(parquet_file_path: str) -> pf.FileSystem:
-    from data.internal_data_utils.parquet_utils import init_arrow_pf_fs as _init_arrow_pf_fs
-
-    return _init_arrow_pf_fs(parquet_file_path)
+    return init_arrow_fs(parquet_file_path)
 
 
 def get_parquet_data_paths_balanced(data_dir_list, rank=0, world_size=1, num_repeat=1):
-    from data.internal_data_utils.parquet_utils import get_parquet_data_paths_balanced as _get_paths
+    all_data_paths = []
+    if rank == 0:
+        logger.info("Rank 0 is gathering local data file paths...")
+        for data_dir in data_dir_list:
+            all_data_paths.extend(sorted(list_local_supported_data_files(data_dir)))
+        logger.info(f"Total local data files found: {len(all_data_paths)}")
 
-    return _get_paths(data_dir_list=data_dir_list, rank=rank, world_size=world_size, num_repeat=num_repeat)
+        if num_repeat > 1:
+            original_len = len(all_data_paths)
+            all_data_paths = all_data_paths * num_repeat
+            logger.info(f"Repeating dataset {num_repeat} times, from {original_len} to {len(all_data_paths)} files.")
+
+    if world_size > 1 and dist.is_available() and dist.is_initialized():
+        object_list = [all_data_paths]
+        dist.broadcast_object_list(object_list, src=0)
+        return object_list[0]
+
+    return all_data_paths
 
 
 def read_parquet_rows(parquet_file, row_group_id: int, columns: Optional[List[str]] = None):

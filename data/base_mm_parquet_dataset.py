@@ -149,11 +149,6 @@ class BaseMMParquetDataset(DistributedIterableDataset, ABC):
 
         return None
 
-    # def lazy_init_clients(self):
-    #     """Optional: lazy initialization, such as TOS clients or decoders."""
-    #     if getattr(self, "tos_cli", None) is None:
-    #         self.tos_cli = TosWrapper()
-
     @staticmethod
     def _read_decord(video: VideoReader, frame_idx: List[int]) -> List[Image.Image]:
         # Use get_batch() instead of reading frames one by one for better performance
@@ -399,8 +394,6 @@ class BaseMMParquetDataset(DistributedIterableDataset, ABC):
         pass
 
     def __iter__(self) -> Iterator[Dict[str, Any]]:
-        # self.lazy_init_clients()
-
         data_paths_per_worker, worker_id = self.get_data_paths_per_worker()
         if self.data_status is not None:
             parquet_start_id = self.data_status[worker_id][0]

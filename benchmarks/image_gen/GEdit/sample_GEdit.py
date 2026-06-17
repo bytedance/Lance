@@ -46,7 +46,7 @@ from data.datasets_custom import ValidationDataset
 from config.config_factory import ModelArguments, DataArguments, TrainingArguments, EvaluationArguments, get_model_path
 
 
-def init_from_vlm_if_needed(model: Qwen2ForCausalLM, model_args: ModelArguments, log_rank0):
+def init_from_vlm_checkpoint(model: Qwen2ForCausalLM, model_args: ModelArguments, log_rank0):
     def load_safetensors_state_dict(folder_path):
         safetensor_files = sorted(
             f for f in os.listdir(folder_path) if f.endswith(".safetensors")
@@ -322,7 +322,7 @@ def main():
         model_args.tie_word_embeddings = False
         llm_config.tie_word_embeddings = False
     else:
-        assert model.language_model.get_input_embeddings().weight.data.data_ptr() != model.language_model.get_output_embeddings().weight.data.data_ptr(), 'tie_world_embeddings 冲突'
+        assert model.language_model.get_input_embeddings().weight.data.data_ptr() != model.language_model.get_output_embeddings().weight.data.data_ptr(), 'tie_word_embeddings conflict'
 
     model = model.to(device=DEVICE, dtype=torch.bfloat16)
     model.eval()

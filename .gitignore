@@ -30,3 +30,8 @@ dist/
 # custom ignore
 results/
 downloads/
+temps/
+datasets/
+
+#
+outputs/

@@ -136,6 +136,10 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
 
+    def _normalize_missing_special_tokens(self):
+        if not hasattr(self, "_unk_token") or self._unk_token is None:
+            self._unk_token = getattr(self, "_eos_token", None) or "<|endoftext|>"
+
     def __init__(
         self,
         vocab_file,
@@ -149,6 +153,11 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
         split_special_tokens=False,
         **kwargs,
     ):
+        if unk_token is None:
+            # Some checkpoint tokenizer configs serialize `unk_token` as null.
+            # Normalize it to eos so multiprocessing reconstruction keeps a valid fallback token.
+            unk_token = eos_token
+
         # Qwen vocab does not contain control tokens; added tokens need to be special
         bos_token = (
             AddedToken(bos_token, lstrip=False, rstrip=False, special=True, normalized=False)
@@ -208,6 +217,11 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
             split_special_tokens=split_special_tokens,
             **kwargs,
         )
+        self._normalize_missing_special_tokens()
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._normalize_missing_special_tokens()
 
     @property
     def vocab_size(self) -> int:

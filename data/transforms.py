@@ -1,20 +1,10 @@
-# Copyright (c) 2025 ByteDance Ltd. and/or its affiliates.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# coding: utf-8
+# Copyright 2025 Bytedance Ltd. and/or its affiliates.
+# SPDX-License-Identifier: Apache-2.0
 
+import random
 from PIL import Image
 
+import cv2
 import numpy as np
 import torch
 from torchvision import transforms
@@ -39,7 +29,7 @@ class MaxLongEdgeMinShortEdgeResize(torch.nn.Module):
             :class:`torchvision.transforms.InterpolationMode`. Default is ``InterpolationMode.BILINEAR``.
             If input is Tensor, only ``InterpolationMode.NEAREST``, ``InterpolationMode.NEAREST_EXACT``,
             ``InterpolationMode.BILINEAR``, and ``InterpolationMode.BICUBIC`` are supported.
-        The corresponding Pillow integer constants, e.g., ``PIL.Image.BILINEAR`` are also accepted.
+            The corresponding Pillow integer constants, e.g., ``PIL.Image.BILINEAR`` are also accepted.
         antialias (bool, optional): Whether to apply antialiasing (default is True).
     """
 
@@ -192,7 +182,7 @@ class VisualTransform:
         return img
 
     def __call__(self, img, img_num=1):
-        # --- Video sequence handling ---
+        # --- Video sequence processing ---
         if isinstance(img, (list, tuple)):
             # List of PIL.Image or tensors
             out = torch.stack([self._process_single(frame, img_num=img_num) for frame in img])  # [T, C, H, W]
@@ -214,5 +204,177 @@ class VisualTransform:
             out = out.permute(1, 0, 2, 3)  # [C, T, H, W]
             return out
         else:
-            # Single frame.
+            # Single frame
             return self._process_single(img, img_num=img_num)
+
+
+def decolorization(image):
+    gray_image = image.convert('L')
+    return Image.merge(image.mode, [gray_image] * 3) if image.mode in ('RGB', 'L') else gray_image
+
+
+def downscale(image, scale_factor):
+    new_width = int(round(image.width * scale_factor))
+    new_height = int(round(image.height * scale_factor))
+    new_width = max(1, new_width)
+    new_height = max(1, new_height)
+    return image.resize((new_width, new_height), resample=Image.BICUBIC)
+
+
+def crop(image, crop_factors):
+    target_h, target_w = crop_factors
+    img_w, img_h = image.size
+
+    if target_h > img_h or target_w > img_w:
+        raise ValueError("Crop size exceeds image dimensions")
+
+    x = random.randint(0, img_w - target_w)
+    y = random.randint(0, img_h - target_h)
+
+    return image.crop((x, y, x + target_w, y + target_h)), [[x, y], [x + target_w, y + target_h]]
+
+
+def motion_blur_opencv(image, kernel_size=15, angle=0):
+    # Linear kernel
+    kernel = np.zeros((kernel_size, kernel_size), dtype=np.float32)
+    kernel[kernel_size // 2, :] = np.ones(kernel_size, dtype=np.float32)
+
+    # Rotation kernel
+    center = (kernel_size / 2 - 0.5, kernel_size / 2 - 0.5)
+    M = cv2.getRotationMatrix2D(center, angle, 1)
+    rotated_kernel = cv2.warpAffine(kernel, M, (kernel_size, kernel_size))
+
+    # Normalize kernel
+    rotated_kernel /= rotated_kernel.sum() if rotated_kernel.sum() != 0 else 1
+
+    img = np.array(image)
+    if img.ndim == 2:
+        blurred = cv2.filter2D(img, -1, rotated_kernel, borderType=cv2.BORDER_REFLECT)
+    else:
+        # For color images, convolve each channel independently
+        blurred = np.zeros_like(img)
+        for c in range(img.shape[2]):
+            blurred[..., c] = cv2.filter2D(img[..., c], -1, rotated_kernel, borderType=cv2.BORDER_REFLECT)
+
+    return Image.fromarray(blurred.astype(np.uint8))
+
+
+def shuffle_patch(image, num_splits, gap_size=2):
+    """Split an image into patches, allowing non-divisible sizes, shuffle them, and stitch them with gaps."""
+    h_splits, w_splits = num_splits
+    img_w, img_h = image.size
+
+    base_patch_h = img_h // h_splits
+    patch_heights = [base_patch_h] * (h_splits - 1)
+    patch_heights.append(img_h - sum(patch_heights))
+
+    base_patch_w = img_w // w_splits
+    patch_widths = [base_patch_w] * (w_splits - 1)
+    patch_widths.append(img_w - sum(patch_widths))
+
+    patches = []
+    current_y = 0
+    for i in range(h_splits):
+        current_x = 0
+        patch_h = patch_heights[i]
+        for j in range(w_splits):
+            patch_w = patch_widths[j]
+            patch = image.crop((current_x, current_y, current_x + patch_w, current_y + patch_h))
+            patches.append(patch)
+            current_x += patch_w
+        current_y += patch_h
+
+    random.shuffle(patches)
+
+    total_width = sum(patch_widths) + (w_splits - 1) * gap_size
+    total_height = sum(patch_heights) + (h_splits - 1) * gap_size
+    new_image = Image.new(image.mode, (total_width, total_height), color=(255, 255, 255))
+
+    current_y = 0  # Starting Y coordinate of the current row
+    patch_idx = 0  # Current patch index
+    for i in range(h_splits):
+        current_x = 0  # Starting X coordinate of the current column
+        patch_h = patch_heights[i]  # Patch height for the current row
+        for j in range(w_splits):
+            # Fetch the shuffled patch
+            patch = patches[patch_idx]
+            patch_w = patch_widths[j]  # Patch width for the current column
+            # Paste the patch with top-left corner at (current_x, current_y)
+            new_image.paste(patch, (current_x, current_y))
+            # Update X coordinate: next patch starts after current patch width plus gap
+            current_x += patch_w + gap_size
+            patch_idx += 1
+        # Update Y coordinate: next row starts after current row height plus gap
+        current_y += patch_h + gap_size
+
+    return new_image
+
+
+def inpainting(image, num_splits, blank_ratio=0.3, blank_color=(255, 255, 255)):
+    """
+    Split an image and randomly blank out patches for inpainting tasks.
+
+    Args:
+        image: Input PIL.Image in RGB mode.
+        h_splits: Number of row splits.
+        w_splits: Number of column splits.
+        blank_ratio: Ratio of blank patches, from 0 to 1.
+        blank_color: RGB color for blank regions, e.g. white (255, 255, 255).
+
+    Returns:
+        Processed and stitched PIL.Image.
+    """
+    h_splits, w_splits = num_splits
+    img_w, img_h = image.size
+
+    base_patch_h = img_h // h_splits
+    patch_heights = [base_patch_h] * (h_splits - 1)
+    patch_heights.append(img_h - sum(patch_heights))
+
+    base_patch_w = img_w // w_splits
+    patch_widths = [base_patch_w] * (w_splits - 1)
+    patch_widths.append(img_w - sum(patch_widths))
+
+    patches = []
+    current_y = 0
+    for i in range(h_splits):
+        current_x = 0
+        patch_h = patch_heights[i]
+        for j in range(w_splits):
+            patch_w = patch_widths[j]
+            patch = image.crop((current_x, current_y, current_x + patch_w, current_y + patch_h))
+            patches.append(patch)
+            current_x += patch_w
+        current_y += patch_h
+
+    total_patches = h_splits * w_splits
+    num_blank = int(total_patches * blank_ratio)
+    num_blank = max(0, min(num_blank, total_patches))
+    blank_indices = random.sample(range(total_patches), num_blank)
+
+    processed_patches = []
+    for idx, patch in enumerate(patches):
+        if idx in blank_indices:
+            blank_patch = Image.new("RGB", patch.size, color=blank_color)
+            processed_patches.append(blank_patch)
+        else:
+            processed_patches.append(patch)
+
+    # Create the result image with the same size as the original
+    result_image = Image.new("RGB", (img_w, img_h))
+    current_y = 0
+    patch_idx = 0
+    for i in range(h_splits):
+        current_x = 0
+        patch_h = patch_heights[i]
+        for j in range(w_splits):
+            # Fetch the processed patch
+            patch = processed_patches[patch_idx]
+            patch_w = patch_widths[j]
+            # Paste it back to the original position
+            result_image.paste(patch, (current_x, current_y))
+            current_x += patch_w
+            patch_idx += 1
+        current_y += patch_h
+
+    return result_image

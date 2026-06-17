@@ -538,7 +538,7 @@ def main():
     new_token_ids.update({"image_token_id": image_token_id})
     model.update_tokenizer(tokenizer=tokenizer)
 
-    if model_args.tie_word_embeddings: # and training_args.finetune_from_hf is False:
+    if model_args.tie_word_embeddings: # and training_args.load_from_lance_checkpoint is False:
         # HACK: Handle the tying logic manually.
         model.language_model.untie_lm_head() # NOTE: untied lm head weights
         model.language_model.copy_new_token_rows_to_lm_head(num_new_tokens) # NOTE: copy the new token rows into lm_head
@@ -546,7 +546,7 @@ def main():
         # Make sure this stays False.
         model_args.tie_word_embeddings = False
         llm_config.tie_word_embeddings = False
-    else: 
+    else:
         assert model.language_model.get_input_embeddings().weight.data.data_ptr() != model.language_model.get_output_embeddings().weight.data.data_ptr(), 'tie_word_embeddings conflict'
 
     model = model.to(device=DEVICE, dtype=torch.bfloat16)

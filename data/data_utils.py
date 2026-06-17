@@ -160,6 +160,36 @@ def create_sparse_mask(document_lens, split_lens, attn_modes, device):
 
     return and_masks(or_masks(causal_mask, full_and_noise_mask), remove_noise_mask, sample_mask)
 
+def prepare_attention_mask_per_sample(split_lens, attn_modes, device="cpu"):
+    """
+    nested_split_lens: A list of N lists of ints. Each int indicates the length of a split within
+        a sample, where each sample contains multiple splits with different attn modes.
+    nested_attn_modes: whether to use full attn in each split.
+    """
+    sample_len = sum(split_lens)
+    attention_mask = torch.zeros((sample_len, sample_len), dtype=torch.bool, device=device)
+
+    csum = 0
+    for s, attn_mode in zip(split_lens, attn_modes):
+        assert attn_mode in ["causal", "full", "noise"]
+        if attn_mode == "causal":
+            attention_mask[csum : csum + s, csum : csum + s] = torch.ones((s, s), device=device).tril()
+            attention_mask[csum : csum + s, :csum] = 1
+        else:
+            attention_mask[csum : csum + s, csum : csum + s] = torch.ones((s, s))
+            attention_mask[csum : csum + s, :csum] = 1
+        csum += s
+
+    csum = 0
+    for s, attn_mode in zip(split_lens, attn_modes):
+        if attn_mode == "noise":
+            attention_mask[:, csum : csum + s] = torch.zeros((sample_len, s))
+            attention_mask[csum : csum + s, csum : csum + s] = torch.ones((s, s))
+        csum += s
+
+    attention_mask = torch.zeros_like(attention_mask, dtype=torch.float).masked_fill_(~attention_mask, float("-inf"))
+
+    return attention_mask
 
 # ------------------------------------------------------------------
 # Tokenizer / loss helpers

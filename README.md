@@ -37,6 +37,7 @@
 
 ## 🔥 Updates
 
+- **`2026/06/17`**: 🛠️ Released the fine-tuning code for Lance. See the training guide in [TRAIN](train.md).
 - **`2026/06/03`**: 🚀 Lance is now supported in [vLLM-Omni](https://github.com/vllm-project/vllm-omni). See the [recipe](https://github.com/vllm-project/vllm-omni/blob/main/recipes/ByteDance/Lance.md)!
 - **`2026/05/29`**: 💪 Added support for Image-to-Video generation. [More to see](assets/docs/changelog/2026-05-29.md)!
 - **`2026/05/26`**: 🎨 The Gradio interface now supports image and video generation, editing, and understanding. [Try it out](assets/docs/changelog/2026-05-26.md)!
@@ -56,10 +57,6 @@ We are actively updating and improving this repository. If you find any bugs or 
 <div align="center">
   <img src="assets/benchmarks/benchmark-overview.png" alt="Lance benchmark overview across image generation, image editing, video generation, and video understanding" width="980">
 </div>
-
-## 📅 Roadmap
-
-- [ ] Release the fine-tuning code.
 
 ## 🎨 Demo
 

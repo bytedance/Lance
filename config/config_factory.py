@@ -177,7 +177,19 @@ class ModelArguments:
 
 @dataclass
 class DataArguments:
+    dataset_config_file:        Optional[str] = None
     val_dataset_config_file:    Optional[str] = None
+    num_workers:                int = 8
+    prefetch_factor:            int = 2
+    expected_num_tokens:        int = 32768
+    max_num_tokens:             int = 36864
+    max_num_tokens_per_sample:  int = 16384
+    prefer_buffer_before:       int = 16384
+    max_buffer_size:            int = 50
+    require_und_gen:            bool = False
+    data_seed:                  int = 2025
+    N_key_frame:                int = -1
+    incre_time_pro:             float = 0
 
 
 @dataclass
@@ -186,13 +198,13 @@ class TrainingArguments:
     apply_chat_template:        bool = False  # Whether to apply the Qwen2.5-VL chat template to input text.
     apply_qwen_2_5_vl_pos_emb:  bool = False  # Whether to enable Qwen2.5-VL position embeddings.
 
-    vae_model_type:             str = "seedance"
+    vae_model_type:             str = "wan"
     visual_gen:                 bool = True
     visual_und:                 bool = True
     freeze_und:                 bool = False
     copy_init_moe:              bool = False
-    finetune_from_hf:           bool = False
-    finetune_from_vlm:          bool = False
+    load_from_lance_checkpoint: bool = False
+    init_from_vlm_checkpoint:   bool = False
     use_flex:                   bool = False
     num_replicate:              int = 1
     num_shard:                  int = 1
@@ -215,6 +227,69 @@ class TrainingArguments:
     cfg_interval:               List[float] = field(default_factory=lambda: [0.4, 1.0])
     cfg_renorm_min:             float = 0
     cfg_renorm_type:            str = "global"  # global | channel | ""
+
+    # EMA, checkpoint, and resume settings
+    use_ema:                    bool = True
+    ema_start_steps:            int = 0
+    auto_resume:                bool = False
+    resume_from:                Optional[str] = None
+    resume_model_only:          bool = False
+    load_data_status:           bool = False
+    finetune_from_ema:          bool = False
+
+    # Output and wandb settings
+    outputs_dir:                str = "outputs"
+    wandb_project:              str = "huangmq-unified-video"
+    wandb_name:                 str = "sft-lance"
+    wandb_runid:                str = "trial"
+    wandb_resume:               str = "allow"
+    wandb_offline:              bool = False
+
+    # Training loop settings
+    jump_first_step:            bool = False
+    log_every:                  int = 10
+    save_every:                 int = 2000
+    eval_every:                 int = 2
+    total_steps:                int = 500_000
+    ckpt_debug_steps:           int = -1
+
+    # Optimizer and scheduler settings
+    warmup_steps:               int = 2000
+    lr_scheduler:               str = "constant"
+    lr:                         float = 1e-5
+    min_lr:                     float = 1e-7
+    beta1:                      float = 0.9
+    beta2:                      float = 0.95
+    eps:                        float = 1e-15
+    ema:                        float = 0.9999
+    max_grad_norm:              float = 1.0
+    mse_weight:                 float = 1.0
+    ce_weight:                  float = 1.0
+    ce_loss_reweighting:        bool = False
+
+    # FSDP settings
+    sharding_strategy:          str = "HYBRID_SHARD"
+    backward_prefetch:          str = "BACKWARD_PRE"
+    cpu_offload:                bool = False
+
+    # Parameter freezing settings
+    freeze_llm:                 bool = False
+    freeze_llm_embed_tokens:    bool = False
+    freeze_vit:                 bool = True
+    freeze_vit_connector:       bool = False
+    freeze_vae:                 bool = True
+    freeze_und_params:          bool = False
+
+    # Validation and data checking settings
+    validation_step:            int = -1
+    validation_type:            str = "UND"
+
+    # Joint-task training settings
+    use_task_embedding:         bool = False
+    use_modality_embedding:     bool = False
+
+    # Inference/runtime algorithm switches
+    use_KVcache:                bool = False
 
 @dataclass
 class InferenceArguments(TrainingArguments):

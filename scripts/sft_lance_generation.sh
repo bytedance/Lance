@@ -55,7 +55,7 @@ echo "NUM_SHARD: $NUM_SHARD"
 
 # ==============================Model and initialization configuration==============================
 VIT_PATH=./downloads/Qwen2.5-VL-ViT
-MODEL_PATH=./downloads/Lance_3B_Video # or use ./downloads/Lance_3B for image-related task
+MODEL_PATH=${MODEL_PATH:-./downloads/Lance_3B_Video} # or use ./downloads/Lance_3B for image-related task
 VIT_TYPE="qwen_2_5_vl_original"
 
 LOAD_FROM_LANCE_CHECKPOINT=True

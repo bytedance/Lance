@@ -28,9 +28,6 @@ sk-video==1.1.10
 spaces==0.50.2
 timm==0.6.13
 tokenizers==0.21.4
-torch==2.8.0+cu126
-torchaudio==2.8.0+cu126
-torchvision==0.23.0+cu126
 tqdm==4.67.3
 transformers==4.49.0
 transformers-stream-generator==0.0.5

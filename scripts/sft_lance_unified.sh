@@ -55,7 +55,7 @@ echo "NUM_SHARD: $NUM_SHARD"
 
 # ==============================Model and initialization configuration==============================
 VIT_PATH=./downloads/Qwen2.5-VL-ViT
-MODEL_PATH=./downloads/Lance_3B_Video # or use ./downloads/Lance_3B for image-related task
+MODEL_PATH=${MODEL_PATH:-./downloads/Lance_3B_Video} # or use ./downloads/Lance_3B for image-related task
 VIT_TYPE="qwen_2_5_vl_original"
 
 LOAD_FROM_LANCE_CHECKPOINT=True
@@ -112,11 +112,11 @@ TIMESTEP_SHIFT=4.0
 USE_FLEX=True
 
 LOG_EVERY=2
-SAVE_EVERY=10 # 200 # 1000
+SAVE_EVERY=200 # 200 # 1000
 CKPT_DEBUG_STEPS=10
 
 # ==============================EMA, resume, and output configuration==============================
-USE_EMA=True
+USE_EMA=False
 AUTO_RESUME=False
 RESUME_MODEL_ONLY=True
 LOAD_DATA_STATUS=False

@@ -23,6 +23,14 @@ from .distributed import (
 )
 from .logging import get_logger
 from .misc import AutoEncoderParams, tuple_mul
+from .save import (
+    convert_dtype,
+    dummy_indexes_searchsorted,
+    get_local_dir,
+    get_local_path,
+    save,
+    set_local_dir,
+)
 from .tensor_ops import (
     flatten,
     unflatten,

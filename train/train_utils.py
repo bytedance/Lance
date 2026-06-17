@@ -785,7 +785,7 @@ def init_from_vlm_checkpoint(model: Qwen2ForCausalLM, model_args: ModelArguments
         unexpected=unexpected,
         log_rank0=log_rank0,
     )
-    log_rank0(f"Loading form Pretrained VLM {model_args.llm_path} is finished.")
+    log_rank0(f"Loading from pretrained VLM {model_args.llm_path} is finished.")
 
     del state_dict
     import gc; gc.collect(); torch.cuda.empty_cache()

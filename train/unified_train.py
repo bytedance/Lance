@@ -328,9 +328,9 @@ def main():
                     data_status[item["dataset_name"]] = {}
                 data_status[item["dataset_name"]][item["worker_id"]] = item["data_indexes"]
 
-            if  (curr_step == training_args.ckpt_debug_steps) or (curr_step > 0 and curr_step % training_args.save_every == 0):
+            if (curr_step == training_args.ckpt_debug_steps) or (curr_step > 0 and curr_step % training_args.save_every == 0):
                 if curr_step == training_args.ckpt_debug_steps:
-                    log_rank0(f"ckpt_debug_steps = {curr_step}, saving ckps just for debug...")
+                    log_rank0(f"ckpt_debug_steps = {curr_step}, saving checkpoints just for debug...")
 
                 import gc; gc.collect(); torch.cuda.empty_cache()
                 if GLOBAL_RANK == 0:

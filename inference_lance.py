@@ -546,7 +546,7 @@ def main():
         # Make sure this stays False.
         model_args.tie_word_embeddings = False
         llm_config.tie_word_embeddings = False
-    else: 
+    else:
         assert model.language_model.get_input_embeddings().weight.data.data_ptr() != model.language_model.get_output_embeddings().weight.data.data_ptr(), 'tie_word_embeddings conflict'
 
     model = model.to(device=DEVICE, dtype=torch.bfloat16)

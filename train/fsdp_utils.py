@@ -330,7 +330,7 @@ class FSDPCheckpoint:
             if ema_model is not None:
                 ema_state_dict_path = osp.join(resume_from, f"ema.safetensors")
                 if not osp.exists(ema_state_dict_path):
-                    logger.info(f"replicaing ema model from {model_state_dict_path}.")
+                    logger.info(f"Replicating EMA model from {model_state_dict_path}.")
                     ema_state_dict_path = model_state_dict_path
                 ema_state_dict = load_file(ema_state_dict_path, device="cpu")
                 # NOTE position embeds are fixed sinusoidal embeddings, so we can just pop it off,

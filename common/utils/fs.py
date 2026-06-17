@@ -26,7 +26,7 @@ DOWNLOAD_DIR = os.environ.get("DOWNLOAD_DIR", 'downloads')
 
 def get_download_dir():
     """
-    Get a local download directory for storaging download files.
+    Get a local download directory for storing downloaded files.
     """
     if DOWNLOAD_DIR is None:
         return osp.join(osp.expanduser("~"), ".cache", "downloads")
@@ -35,7 +35,7 @@ def get_download_dir():
 
 def set_download_dir(dirname):
     """
-    Set a local download directory for storaging download files.
+    Set a local download directory for storing downloaded files.
     """
     if dirname is None:
         return

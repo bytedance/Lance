@@ -37,7 +37,7 @@
 
 ## 🔥 更新
 
-- **`2026/06/16`**: 🛠️ 发布 Lance 微调代码。查看 [训练指南](train_zh.md) 了解细节。
+- **`2026/06/17`**: 🛠️ 发布 Lance 微调代码。查看 [训练指南](train_zh.md) 了解细节。
 - **`2026/06/03`**: 🚀 Lance 现已被 [vLLM-Omni](https://github.com/vllm-project/vllm-omni) 支持。查看 [recipe](https://github.com/vllm-project/vllm-omni/blob/main/recipes/ByteDance/Lance.md)！
 - **`2026/05/29`**: 💪 增加 Image-to-Video generation 支持。[查看更多](assets/docs/changelog/2026-05-29.md)！
 - **`2026/05/26`**: 🎨 Gradio 界面现已支持图像和视频生成、编辑与理解任务。[欢迎体验](assets/docs/changelog/2026-05-26.md)！

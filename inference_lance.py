@@ -30,7 +30,9 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader
 from transformers import HfArgumentParser, set_seed
 from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
+from safetensors import safe_open
 from safetensors.torch import load_file
+from torch.nn.modules.module import _IncompatibleKeys
 
 from data.dataset_base import DataConfig, simple_custom_collate
 from data.data_utils import add_special_tokens
@@ -76,6 +78,14 @@ UNDERSTANDING_TASKS = {
     TASK_X2T_IMAGE,
     TASK_X2T_VIDEO,
 }
+MEMORY_MODE_PARALLEL = "parallel"
+MEMORY_MODE_VAE_RELAY = "vae_relay"
+MEMORY_MODE_RELAY = "relay"
+VALID_MEMORY_MODES = {
+    MEMORY_MODE_PARALLEL,
+    MEMORY_MODE_VAE_RELAY,
+    MEMORY_MODE_RELAY,
+}
 TASK_DEFAULT_CONFIGS = {
     TASK_T2I: {
         "model_family": "image",
@@ -114,7 +124,108 @@ TASK_DEFAULT_CONFIGS = {
     },
 }
 
-def init_from_model_path_if_needed(model: Qwen2ForCausalLM, model_args: ModelArguments):
+def normalize_memory_mode(memory_mode: str) -> str:
+    memory_mode = (memory_mode or MEMORY_MODE_PARALLEL).strip().lower()
+    aliases = {
+        "none": MEMORY_MODE_PARALLEL,
+        "default": MEMORY_MODE_PARALLEL,
+        "vae": MEMORY_MODE_VAE_RELAY,
+        "vae-relay": MEMORY_MODE_VAE_RELAY,
+        "tower_relay": MEMORY_MODE_RELAY,
+        "tower-relay": MEMORY_MODE_RELAY,
+    }
+    memory_mode = aliases.get(memory_mode, memory_mode)
+    if memory_mode not in VALID_MEMORY_MODES:
+        raise ValueError(f"memory_mode must be one of {sorted(VALID_MEMORY_MODES)}, got {memory_mode!r}")
+    return memory_mode
+
+
+def validate_memory_mode(memory_mode: str, inference_args: InferenceArguments) -> None:
+    if memory_mode == MEMORY_MODE_RELAY:
+        if inference_args.task != TASK_T2I:
+            raise ValueError("memory_mode='relay' is currently implemented only for t2i image generation.")
+        if not inference_args.use_KVcache:
+            raise ValueError("memory_mode='relay' requires --use_KVcache true.")
+
+
+def uses_vae_relay(memory_mode: str) -> bool:
+    return memory_mode in {MEMORY_MODE_VAE_RELAY, MEMORY_MODE_RELAY}
+
+
+def log_cuda_memory(stage_name: str, enabled: bool, rank0_log=print, device: Optional[int] = None) -> None:
+    if not enabled or not torch.cuda.is_available():
+        return
+    if device is None:
+        device = torch.cuda.current_device()
+    torch.cuda.synchronize(device)
+    allocated = torch.cuda.memory_allocated(device) / (1024 ** 3)
+    reserved = torch.cuda.memory_reserved(device) / (1024 ** 3)
+    peak = torch.cuda.max_memory_allocated(device) / (1024 ** 3)
+    rank0_log(f"[memory] {stage_name}: allocated={allocated:.2f}GiB reserved={reserved:.2f}GiB peak={peak:.2f}GiB")
+
+
+def wan_vae_config() -> AutoEncoderParams:
+    return AutoEncoderParams(
+        downsample_spatial=16,
+        downsample_temporal=4,
+        z_channels=48,
+    )
+
+
+def set_module_tensor_by_name(root: torch.nn.Module, key: str, tensor: torch.Tensor) -> bool:
+    parts = key.split(".")
+    module = root
+    for part in parts[:-1]:
+        module = getattr(module, part, None)
+        if module is None:
+            return False
+
+    leaf_name = parts[-1]
+    if leaf_name in module._parameters:
+        old_param = module._parameters[leaf_name]
+        if old_param is None:
+            return False
+        if old_param.device.type == "meta":
+            if tensor.dtype != old_param.dtype:
+                tensor = tensor.to(dtype=old_param.dtype)
+            module._parameters[leaf_name] = torch.nn.Parameter(tensor, requires_grad=old_param.requires_grad)
+            return True
+        if tensor.dtype != old_param.dtype or tensor.device != old_param.device:
+            tensor = tensor.to(device=old_param.device, dtype=old_param.dtype)
+        old_param.data = tensor
+        return True
+
+    if leaf_name in module._buffers:
+        old_buffer = module._buffers[leaf_name]
+        if old_buffer is not None and old_buffer.device.type == "meta":
+            if tensor.dtype != old_buffer.dtype:
+                tensor = tensor.to(dtype=old_buffer.dtype)
+            module._buffers[leaf_name] = tensor
+            return True
+        if old_buffer is not None and (tensor.dtype != old_buffer.dtype or tensor.device != old_buffer.device):
+            tensor = tensor.to(device=old_buffer.device, dtype=old_buffer.dtype)
+        module._buffers[leaf_name] = tensor
+        return True
+
+    return False
+
+
+def materialize_rotary_embedding(rotary_emb: torch.nn.Module) -> None:
+    inv_freq = getattr(rotary_emb, "inv_freq", None)
+    if inv_freq is None or inv_freq.device.type != "meta":
+        return
+
+    rope_kwargs = getattr(rotary_emb, "rope_kwargs", {})
+    try:
+        inv_freq, attention_scaling = rotary_emb.rope_init_fn(rotary_emb.config, "cpu", **rope_kwargs)
+    except TypeError:
+        inv_freq, attention_scaling = rotary_emb.rope_init_fn(rotary_emb.config, "cpu")
+    rotary_emb.attention_scaling = attention_scaling
+    rotary_emb.register_buffer("inv_freq", inv_freq, persistent=False)
+    rotary_emb.original_inv_freq = rotary_emb.inv_freq
+
+
+def init_from_model_path_if_needed(model: Qwen2ForCausalLM, model_args: ModelArguments, stream: bool = False, progress_log=None):
     # Always load the trained Lance checkpoint from model_path.
     path_dir = model_args.model_path
     ema_path = osp.join(path_dir, "ema.safetensors")
@@ -133,6 +244,47 @@ def init_from_model_path_if_needed(model: Qwen2ForCausalLM, model_args: ModelArg
         raise FileNotFoundError(
             f"Fine-tuning failed: No valid checkpoint ('ema.safetensors' or 'model.safetensors') found in {path_dir}"
         )
+
+    if stream:
+        expected_meta = {
+            name: tuple(param.shape)
+            for name, param in model.named_parameters()
+        }
+        expected_meta.update(
+            {
+                name: tuple(buffer.shape)
+                for name, buffer in model.named_buffers()
+                if buffer is not None
+            }
+        )
+        expected_keys = set(expected_meta.keys())
+        loaded_keys = set()
+        unexpected_keys = []
+
+        with safe_open(model_path_ft, framework="pt", device="cpu") as checkpoint:
+            checkpoint_keys = list(checkpoint.keys())
+            for idx, key in enumerate(checkpoint_keys, start=1):
+                if key == "latent_pos_embed.pos_embed":
+                    continue
+                if key not in expected_keys:
+                    unexpected_keys.append(key)
+                    continue
+
+                tensor = checkpoint.get_tensor(key)
+                target_shape = expected_meta[key]
+                if target_shape != tuple(tensor.shape):
+                    raise RuntimeError(
+                        f"Checkpoint shape mismatch for {key}: expected {target_shape}, got {tuple(tensor.shape)}"
+                    )
+                if not set_module_tensor_by_name(model, key, tensor):
+                    unexpected_keys.append(key)
+                    continue
+                loaded_keys.add(key)
+                if progress_log is not None and len(loaded_keys) % 100 == 0:
+                    progress_log(f"[startup] streamed {len(loaded_keys)}/{len(checkpoint_keys)} checkpoint tensors")
+
+        missing_keys = [key for key in expected_keys if key not in loaded_keys]
+        return _IncompatibleKeys(missing_keys, unexpected_keys)
 
     # NOTE: position embeds are fixed sinusoidal embeddings, so we can just pop it off,
     # which makes it easier to adapt to different resolutions.
@@ -264,13 +416,35 @@ def validate_on_fixed_batch(
     save_path_gen: str = "",
     save_path_gt: str = "",
 ):
+    memory_mode = normalize_memory_mode(inference_args.memory_mode)
+    relay_enabled = memory_mode == MEMORY_MODE_RELAY
+    vae_relay_enabled = uses_vae_relay(memory_mode)
+
+    def ensure_vae_model(current_vae_model: Optional[WanVideoVAE]) -> WanVideoVAE:
+        if current_vae_model is None:
+            current_vae_model = WanVideoVAE(device="cpu")
+        return current_vae_model
+
     val_data = val_data_cpu.cuda(device).to_dict()
-    fsdp_model = fsdp_model.to(device=device, dtype=torch.bfloat16)
+    if relay_enabled:
+        fsdp_model.configure_relay_memory(enabled=True, offload_device="cpu", log_memory=inference_args.relay_memory_log)
+    else:
+        fsdp_model = fsdp_model.to(device=device, dtype=torch.bfloat16)
+    log_cuda_memory("validation batch ready", inference_args.relay_memory_log, device=device)
 
     with torch.no_grad(), torch.amp.autocast("cuda", enabled=True, dtype=torch.bfloat16):
         # Compute padded_latent.
         if "padded_videos" in val_data.keys():
+            needs_vae_encode = any(str(mode).lower().startswith("on") for mode in val_data["vae_data_mode"])
+            if vae_relay_enabled and needs_vae_encode:
+                vae_model = ensure_vae_model(vae_model)
+                vae_model.to(torch.device("cuda", device))
+                log_cuda_memory("after VAE materialize for encode", inference_args.relay_memory_log, device=device)
             val_data["padded_latent"] = make_padded_latent(val_data["padded_videos"], val_data["vae_data_mode"], vae_model)
+            if vae_relay_enabled and needs_vae_encode and vae_model is not None:
+                vae_model.to("cpu")
+                clean_memory()
+                log_cuda_memory("after VAE encode offload", inference_args.relay_memory_log, device=device)
 
         # -------------------- Generation branch --------------------
         if inference_args.task in GENERATION_TASKS:
@@ -313,11 +487,25 @@ def validate_on_fixed_batch(
                 "cfg_uncond_token_id": training_args.cfg_uncond_token_id,
                 "index": val_data["index"],
                 "val_padded_videos": val_data["padded_videos"] if save_source_video else None,
+                "memory_mode": memory_mode,
+                "relay_memory_log": inference_args.relay_memory_log,
             }
             if inference_args.use_KVcache:
                 denoise_latent, captions, padded_videos, index = fsdp_model.validation_gen_KVcache(**params)
             else:
                 denoise_latent, captions, padded_videos, index = fsdp_model.validation_gen(**params)
+
+            if vae_relay_enabled:
+                log_cuda_memory("before Lance offload for VAE decode", inference_args.relay_memory_log, device=device)
+                if relay_enabled:
+                    fsdp_model.relay_discard_all()
+                else:
+                    fsdp_model = fsdp_model.to("cpu")
+                clean_memory()
+                log_cuda_memory("after Lance release for VAE decode", inference_args.relay_memory_log, device=device)
+                vae_model = ensure_vae_model(vae_model)
+                vae_model.to(torch.device("cuda", device))
+                log_cuda_memory("after VAE materialize", inference_args.relay_memory_log, device=device)
 
             # Decode.
             for i_val, latent in enumerate(denoise_latent):
@@ -348,6 +536,10 @@ def validate_on_fixed_batch(
                 clean_memory()
 
             del denoise_latent, captions, padded_videos, params
+            if vae_relay_enabled and vae_model is not None:
+                vae_model.to("cpu")
+                clean_memory()
+                log_cuda_memory("after VAE offload", inference_args.relay_memory_log, device=device)
             clean_memory()
 
         elif inference_args.task in UNDERSTANDING_TASKS:
@@ -421,10 +613,15 @@ def main():
 
     # ========================= Load task paths and example JSONs from defaults ==============================
     apply_inference_defaults(model_args, data_args, inference_args)
+    inference_args.memory_mode = normalize_memory_mode(inference_args.memory_mode)
+    validate_memory_mode(inference_args.memory_mode, inference_args)
     training_args.validation_noise_seed = training_args.validation_data_seed
+    relay_enabled = inference_args.memory_mode == MEMORY_MODE_RELAY
+    vae_relay_enabled = uses_vae_relay(inference_args.memory_mode)
 
     logger = get_logger()
-    log_rank0 = print if GLOBAL_RANK == 0 else (lambda *_: None)  # Only print on rank 0.
+    log_rank0 = (lambda *args, **kwargs: print(*args, **kwargs, flush=True)) if GLOBAL_RANK == 0 else (lambda *_args, **_kwargs: None)  # Only print on rank 0.
+    log_rank0(f"[startup] memory_mode={inference_args.memory_mode}")
 
     def log_stage(stage_name: str, start_time: float, extra: str = ""):
         elapsed = time.perf_counter() - start_time
@@ -436,79 +633,107 @@ def main():
     set_seed(seed)
 
     # ========================= LLM model setup ==============================
-    stage_start = time.perf_counter()
-    log_rank0(f"[startup] Loading LLM config: {osp.join(model_args.model_path, 'llm_config.json')}")
-    llm_config: Qwen2Config = Qwen2Config.from_json_file(osp.join(model_args.model_path, "llm_config.json"))
-    log_stage("LLM config load", stage_start)
+    relay_t2i_without_vit = relay_enabled and inference_args.task == TASK_T2I
+    load_visual_und = training_args.visual_und and not relay_t2i_without_vit
+    vit_config = None
+    vit_model = None
 
-    llm_config.layer_module = model_args.layer_module
-    llm_config.qk_norm = model_args.llm_qk_norm
-    llm_config.qk_norm_und = model_args.llm_qk_norm_und
-    llm_config.qk_norm_gen = model_args.llm_qk_norm_gen
+    original_default_dtype = torch.get_default_dtype()
+    if relay_enabled:
+        torch.set_default_dtype(torch.bfloat16)
+        log_rank0("[startup] Using bf16 default dtype for relay CPU module construction")
 
-    llm_config.tie_word_embeddings = model_args.tie_word_embeddings
-    llm_config.freeze_und = training_args.freeze_und
-    llm_config.apply_qwen_2_5_vl_pos_emb = training_args.apply_qwen_2_5_vl_pos_emb
-
-    stage_start = time.perf_counter()
-    log_rank0(f"[startup] Initializing LLM weights: {model_args.model_path}")
-    language_model: Qwen2ForCausalLM = Qwen2ForCausalLM(llm_config)
-    log_stage("LLM weight init", stage_start)
-
-    if training_args.visual_und:
-        if model_args.vit_type in ("qwen2_5_vl", "qwen_2_5_vl_original"):
-            stage_start = time.perf_counter()
-            log_rank0(f"[startup] Loading VIT config: {model_args.vit_path}")
-            vit_config = Qwen2_5_VLVisionConfig.from_pretrained(model_args.vit_path)
-            log_stage("VIT config load", stage_start)
-
-            stage_start = time.perf_counter()
-            log_rank0(f"[startup] Loading VIT weights: {osp.join(model_args.vit_path, 'vit.safetensors')}")
-            vit_model = Qwen2_5_VisionTransformerPretrainedModel(vit_config)
-            vit_weights = load_file(osp.join(model_args.vit_path, "vit.safetensors"))
-            vit_model.load_state_dict(vit_weights, strict=True)
-            log_stage("VIT weight load", stage_start)
-        else:
-            raise ValueError(f"Unsupported vit_type: {model_args.vit_type}")
-
-        clean_memory(vit_weights)
-
-    if training_args.visual_gen:
+    try:
         stage_start = time.perf_counter()
-        log_rank0("[startup] Initializing VAE")
-        vae_model = WanVideoVAE()
-        vae_config: AutoEncoderParams = deepcopy(vae_model.vae_config)
-        log_stage("VAE init", stage_start)
-    else:
-        vae_model = None
-        vae_config = None
+        log_rank0(f"[startup] Loading LLM config: {osp.join(model_args.model_path, 'llm_config.json')}")
+        llm_config: Qwen2Config = Qwen2Config.from_json_file(osp.join(model_args.model_path, "llm_config.json"))
+        log_stage("LLM config load", stage_start)
 
-    # Lance configuration
-    config = LanceConfig(
-        visual_gen=training_args.visual_gen,
-        visual_und=training_args.visual_und,
-        llm_config=llm_config,
-        vit_config=vit_config if training_args.visual_und else None,
-        vae_config=vae_config if training_args.visual_gen else None,
-        latent_patch_size=model_args.latent_patch_size,
-        max_num_frames=model_args.max_num_frames,
-        max_latent_size=model_args.max_latent_size,
-        vit_max_num_patch_per_side=model_args.vit_max_num_patch_per_side,
-        connector_act=model_args.connector_act,
-        interpolate_pos=model_args.interpolate_pos,
-        timestep_shift=training_args.timestep_shift,
-    )
-    model: Lance = Lance(
-        language_model=language_model,
-        vit_model=vit_model if training_args.visual_und else None,
-        vit_type=model_args.vit_type,
-        config=config,
-        training_args=training_args,
-    )
-    stage_start = time.perf_counter()
-    log_rank0(f"[startup] Moving Lance model to GPU {DEVICE}")
-    model = model.to(DEVICE)
-    log_stage("Lance model move to GPU", stage_start)
+        llm_config.layer_module = model_args.layer_module
+        llm_config.qk_norm = model_args.llm_qk_norm
+        llm_config.qk_norm_und = model_args.llm_qk_norm_und
+        llm_config.qk_norm_gen = model_args.llm_qk_norm_gen
+
+        llm_config.tie_word_embeddings = model_args.tie_word_embeddings
+        llm_config.freeze_und = training_args.freeze_und
+        llm_config.apply_qwen_2_5_vl_pos_emb = training_args.apply_qwen_2_5_vl_pos_emb
+
+        stage_start = time.perf_counter()
+        log_rank0(f"[startup] Initializing LLM weights: {model_args.model_path}")
+        if relay_enabled:
+            with torch.device("meta"):
+                language_model: Qwen2ForCausalLM = Qwen2ForCausalLM(llm_config)
+        else:
+            language_model: Qwen2ForCausalLM = Qwen2ForCausalLM(llm_config)
+        log_stage("LLM weight init", stage_start)
+
+        if load_visual_und:
+            if model_args.vit_type in ("qwen2_5_vl", "qwen_2_5_vl_original"):
+                stage_start = time.perf_counter()
+                log_rank0(f"[startup] Loading VIT config: {model_args.vit_path}")
+                vit_config = Qwen2_5_VLVisionConfig.from_pretrained(model_args.vit_path)
+                log_stage("VIT config load", stage_start)
+
+                stage_start = time.perf_counter()
+                log_rank0(f"[startup] Loading VIT weights: {osp.join(model_args.vit_path, 'vit.safetensors')}")
+                vit_model = Qwen2_5_VisionTransformerPretrainedModel(vit_config)
+                vit_weights = load_file(osp.join(model_args.vit_path, "vit.safetensors"))
+                vit_model.load_state_dict(vit_weights, strict=True)
+                log_stage("VIT weight load", stage_start)
+                clean_memory(vit_weights)
+            else:
+                raise ValueError(f"Unsupported vit_type: {model_args.vit_type}")
+        elif training_args.visual_und:
+            log_rank0("[startup] Skipping VIT weight load for t2i relay")
+
+        if training_args.visual_gen:
+            stage_start = time.perf_counter()
+            if relay_enabled:
+                vae_model = None
+                vae_config = wan_vae_config()
+                log_rank0("[startup] Deferring VAE weight load until relay decode")
+            else:
+                vae_device = "cpu" if vae_relay_enabled else DEVICE
+                log_rank0(f"[startup] Initializing VAE on {vae_device}")
+                vae_model = WanVideoVAE(device=vae_device)
+                vae_config: AutoEncoderParams = deepcopy(vae_model.vae_config)
+                log_stage("VAE init", stage_start)
+        else:
+            vae_model = None
+            vae_config = None
+
+        # Lance configuration
+        config = LanceConfig(
+            visual_gen=training_args.visual_gen,
+            visual_und=load_visual_und,
+            llm_config=llm_config,
+            vit_config=vit_config if load_visual_und else None,
+            vae_config=vae_config if training_args.visual_gen else None,
+            latent_patch_size=model_args.latent_patch_size,
+            max_num_frames=model_args.max_num_frames,
+            max_latent_size=model_args.max_latent_size,
+            vit_max_num_patch_per_side=model_args.vit_max_num_patch_per_side,
+            connector_act=model_args.connector_act,
+            interpolate_pos=model_args.interpolate_pos,
+            timestep_shift=training_args.timestep_shift,
+        )
+        model: Lance = Lance(
+            language_model=language_model,
+            vit_model=vit_model if load_visual_und else None,
+            vit_type=model_args.vit_type,
+            config=config,
+            training_args=training_args,
+        )
+    finally:
+        if relay_enabled:
+            torch.set_default_dtype(original_default_dtype)
+    if relay_enabled:
+        log_rank0("[startup] Keeping Lance model on CPU for relay phase loading")
+    else:
+        stage_start = time.perf_counter()
+        log_rank0(f"[startup] Moving Lance model to GPU {DEVICE}")
+        model = model.to(DEVICE)
+        log_stage("Lance model move to GPU", stage_start)
 
     # Setup tokenizer for model:
     stage_start = time.perf_counter()
@@ -519,10 +744,16 @@ def main():
     log_stage("tokenizer load and special token init", stage_start, extra=f"num_new_tokens={num_new_tokens}")
 
     # Initialize MoE before loading the checkpoint.
-    if training_args.copy_init_moe:
+    if training_args.copy_init_moe and not relay_enabled:
         language_model.init_moe()
+    elif training_args.copy_init_moe and relay_enabled:
+        log_rank0("[startup] Skipping pre-load MoE copy for relay streaming checkpoint load")
 
-    init_from_model_path_if_needed(model, model_args)
+    if relay_enabled:
+        log_rank0("[startup] Loading Lance checkpoint with streaming CPU loader")
+    init_from_model_path_if_needed(model, model_args, stream=relay_enabled, progress_log=log_rank0 if relay_enabled else None)
+    if relay_enabled and hasattr(model.language_model.model, "rotary_emb"):
+        materialize_rotary_embedding(model.language_model.model.rotary_emb)
 
     # Resize afterward to avoid checkpoint shape mismatches or overwritten weights.
     if num_new_tokens > 0:
@@ -549,7 +780,11 @@ def main():
     else:
         assert model.language_model.get_input_embeddings().weight.data.data_ptr() != model.language_model.get_output_embeddings().weight.data.data_ptr(), 'tie_word_embeddings conflict'
 
-    model = model.to(device=DEVICE, dtype=torch.bfloat16)
+    if relay_enabled:
+        model = model.to(dtype=torch.bfloat16)
+        model.configure_relay_memory(enabled=True, offload_device="cpu", log_memory=inference_args.relay_memory_log)
+    else:
+        model = model.to(device=DEVICE, dtype=torch.bfloat16)
     model.eval()
     if vae_model is not None and hasattr(vae_model, "eval"):
         vae_model.eval()

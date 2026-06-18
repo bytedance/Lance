@@ -592,6 +592,24 @@ class Qwen2MoTDecoderLayer(nn.Module):
         self.post_attention_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm_moe_gen = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
+    def _relay_und_modules(self):
+        attn = self.self_attn
+        for attr in ("q_proj", "k_proj", "v_proj", "o_proj", "q_norm", "k_norm"):
+            module = getattr(attn, attr, None)
+            if isinstance(module, nn.Module):
+                yield module
+        for attr in ("input_layernorm", "post_attention_layernorm", "mlp"):
+            module = getattr(self, attr, None)
+            if isinstance(module, nn.Module):
+                yield module
+
+    def _relay_move_und_branch(self, device, dtype=None):
+        for module in self._relay_und_modules():
+            if dtype is None:
+                module.to(device=device)
+            else:
+                module.to(device=device, dtype=dtype)
+
     def forward(self, *args, **kwargs):
         if self.training or kwargs.get("mode_forward") == "validation":
             return self.forward_train(*args, **kwargs)
@@ -660,6 +678,17 @@ class Qwen2MoTDecoderLayer(nn.Module):
         **kwargs
     ) -> BaseNavitOutputWithPast:
 
+        relay_stream_und = bool(kwargs.get("relay_stream_und", False))
+        relay_offload_device = kwargs.get("relay_offload_device", torch.device("cpu"))
+        relay_stream_this_layer = (
+            relay_stream_und
+            and mode == "gen"
+            and packed_text_indexes is not None
+            and packed_text_indexes.numel() > 0
+        )
+        if relay_stream_this_layer:
+            self._relay_move_und_branch(packed_query_sequence.device, dtype=packed_query_sequence.dtype)
+
         residual = packed_query_sequence
         if mode == "und":
             packed_query_sequence = self.input_layernorm(packed_query_sequence)
@@ -704,6 +733,10 @@ class Qwen2MoTDecoderLayer(nn.Module):
             packed_query_sequence = packed_query_sequence_
 
         packed_query_sequence = residual + packed_query_sequence
+        if relay_stream_this_layer:
+            self._relay_move_und_branch(relay_offload_device)
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
         return packed_query_sequence, past_key_values
 
 
@@ -919,6 +952,9 @@ class Qwen2Model(Qwen2PreTrainedModel):
         **kwargs,
     ) -> BaseNavitOutputWithPast:
 
+        relay_stream_und = bool(kwargs.pop("relay_stream_und", getattr(self, "_relay_stream_und", False)))
+        relay_offload_device = kwargs.pop("relay_offload_device", getattr(self, "_relay_offload_device", torch.device("cpu")))
+
         if self.apply_qwen_2_5_vl_pos_emb:
             packed_query_position_embeddings = self.rotary_emb(packed_query_sequence.unsqueeze(0), packed_query_position_ids)
             kwargs.update({"apply_qwen_2_5_vl_pos_emb": self.apply_qwen_2_5_vl_pos_emb})
@@ -933,6 +969,11 @@ class Qwen2Model(Qwen2PreTrainedModel):
         extra_inputs = {}
         if self.use_moe:
             extra_inputs.update(mode=mode)
+            if relay_stream_und:
+                extra_inputs.update(
+                    relay_stream_und=relay_stream_und,
+                    relay_offload_device=relay_offload_device,
+                )
             if mode == "gen":
                 assert packed_vae_token_indexes is not None
                 assert packed_text_indexes is not None
@@ -960,10 +1001,21 @@ class Qwen2Model(Qwen2PreTrainedModel):
             if mode == "und":
                 packed_query_sequence = self.norm(packed_query_sequence)
             elif mode == "gen":
+                relay_stream_final_norm = (
+                    relay_stream_und
+                    and packed_text_indexes is not None
+                    and packed_text_indexes.numel() > 0
+                )
+                if relay_stream_final_norm:
+                    self.norm.to(device=packed_query_sequence.device, dtype=packed_query_sequence.dtype)
                 packed_query_sequence_ = torch.zeros_like(packed_query_sequence)
                 packed_query_sequence_[packed_text_indexes] = self.norm(packed_query_sequence[packed_text_indexes])
                 packed_query_sequence_[packed_vae_token_indexes] = self.norm_moe_gen(packed_query_sequence[packed_vae_token_indexes])
                 packed_query_sequence = packed_query_sequence_
+                if relay_stream_final_norm:
+                    self.norm.to(device=relay_offload_device)
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
         else:
             packed_query_sequence = self.norm(packed_query_sequence)
 

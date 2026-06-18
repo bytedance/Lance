@@ -15,6 +15,8 @@ VALIDATION_DATA_SEED=${VALIDATION_DATA_SEED:-42}
 CFG_TEXT_SCALE=${CFG_TEXT_SCALE:-4.0}
 USE_KVCACHE=${USE_KVCACHE:-true}
 ENHANCE_PROMPT=${ENHANCE_PROMPT:-false}
+MEMORY_MODE=${MEMORY_MODE:-parallel}       # parallel | vae_relay | relay
+RELAY_MEMORY_LOG=${RELAY_MEMORY_LOG:-false}
 
 NUM_FRAMES=${NUM_FRAMES:-50}             # max: 121 frames, unused for image tasks
 VIDEO_HEIGHT=${VIDEO_HEIGHT:-768}        # unused for editing
@@ -39,6 +41,8 @@ while [[ $# -gt 0 ]]; do
         --CFG_TEXT_SCALE) CFG_TEXT_SCALE="$2"; shift 2 ;;
         --USE_KVCACHE) USE_KVCACHE="$2"; shift 2 ;;
         --ENHANCE_PROMPT) ENHANCE_PROMPT="$2"; shift 2 ;;
+        --MEMORY_MODE) MEMORY_MODE="$2"; shift 2 ;;
+        --RELAY_MEMORY_LOG) RELAY_MEMORY_LOG="$2"; shift 2 ;;
 
         --NUM_FRAMES) NUM_FRAMES="$2"; shift 2 ;;
         --VIDEO_HEIGHT) VIDEO_HEIGHT="$2"; shift 2 ;;
@@ -55,6 +59,7 @@ while [[ $# -gt 0 ]]; do
             echo "  bash inference_lance_my.sh --TASK_NAME image_edit --CONFIG_PATH config.json"
             echo "  bash inference_lance_my.sh --TASK_NAME t2v --ENHANCE_PROMPT true"
             echo "  bash inference_lance_my.sh --TASK_NAME i2v --ENHANCE_PROMPT true"
+            echo "  bash inference_lance_my.sh --TASK_NAME t2i --MODEL_PATH downloads/Lance_3B --MEMORY_MODE relay --RELAY_MEMORY_LOG true"
             exit 0
             ;;
 
@@ -111,6 +116,8 @@ echo "  - cfg_text_scale: ${CFG_TEXT_SCALE}"
 echo "  - num_frames: ${NUM_FRAMES}"
 echo "  - use_KVcache: ${USE_KVCACHE}"
 echo "  - enhance_prompt: ${ENHANCE_PROMPT}"
+echo "  - memory_mode: ${MEMORY_MODE}"
+echo "  - relay_memory_log: ${RELAY_MEMORY_LOG}"
 echo "================================================"
 echo ""
 
@@ -157,6 +164,8 @@ accelerate launch \
     --cfg_text_scale        $CFG_TEXT_SCALE \
     --use_KVcache           "$USE_KVCACHE" \
     --enhance_prompt        "$ENHANCE_PROMPT" \
+    --memory_mode           "$MEMORY_MODE" \
+    --relay_memory_log      "$RELAY_MEMORY_LOG" \
     "${CONFIG_ARGS[@]}"
 
 echo ""

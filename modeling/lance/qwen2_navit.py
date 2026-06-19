@@ -969,6 +969,15 @@ class Qwen2Model(Qwen2PreTrainedModel):
                 **kwargs,
             )
 
+        # Model-parallel (inference twin of the forward_train fix): after the layer
+        # loop, packed_query_sequence lives on the last layer's shard (e.g. cuda:4),
+        # but the index tensors and norm modules are pinned to cuda:0. The gen-mode
+        # index-put below combines across devices, which accelerate's hooks can't
+        # reach (it's parent-level Python, not a submodule boundary). Move the
+        # sequence back to the index device first.
+        if self.use_moe and mode == "gen" and packed_query_sequence.device != packed_text_indexes.device:
+            packed_query_sequence = packed_query_sequence.to(packed_text_indexes.device)
+
         if self.use_moe:
             if mode == "und":
                 packed_query_sequence = self.norm(packed_query_sequence)

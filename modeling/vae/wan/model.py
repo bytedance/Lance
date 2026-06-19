@@ -43,6 +43,11 @@ class WanVideoVAE(object):
         self.logger = self.__class__.__logger__
 
         self.dtype = kwargs.get("dtype", torch.bfloat16)
+        # Allow the VAE to live on a card other than cuda:LOCAL_RANK. Under
+        # model-parallel sharding, cuda:0 is the most crowded device (embed, lm_head,
+        # ViT, first LLM layers), and the video VAE decode's conv activations OOM it.
+        # Placing the VAE on the lightest shard gives the decode room to breathe.
+        # Defaults to get_device() so single-GPU behavior is unchanged.
         self.device = torch.device(kwargs.get("device", get_device()))
         self.configure_vae_model()
         self.use_sample = kwargs.get("use_sample", True)

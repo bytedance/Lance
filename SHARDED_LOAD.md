@@ -114,17 +114,60 @@ which accelerate's hooks cannot reach. Each was fixed locally:
   `InferenceArguments`. `0` means "use all visible GPUs"
   (`torch.cuda.device_count()`); >0 caps to that many.
 
-## Memory profile (Lance_3B, x2t_image, 5 × 3060)
+### 6. Generation tasks (t2i / t2v): the diffusion + VAE-decode path
+
+The generation tasks exercise code the understanding path doesn't, and each
+needed a model-parallel fix:
+
+- **`forward_inference` gen-mode norm** (`qwen2_navit.py`, the `mode=="gen"`
+  branch after the decoder-layer loop). This is the inference-mode twin of the
+  `forward_train` fix above: after the layer loop `packed_query_sequence` is on
+  the last shard, but `packed_text_indexes`/`packed_vae_token_indexes` and the
+  `norm`/`norm_moe_gen` modules are on cuda:0. Added a
+  `.to(packed_text_indexes.device)` guard before the index-put. This runs on
+  every diffusion timestep. (The KVcache generation path attends via
+  `flash_attn_varlen_func`, *not* flex_attention, so the dense-mask change in §3
+  isn't even exercised here — no regression risk.)
+
+- **VAE placement** (`modeling/vae/wan/model.py` + `inference_lance.py`). The
+  WanVideoVAE used to hard-code `get_device()` = cuda:0. `WanVideoVAE` now
+  accepts a `device=` (default `get_device()`, so single-GPU is unchanged), and
+  the launcher builds it on the **last** shard.
+
+- **Dedicated VAE card** (`_build_lance_device_map(..., reserve_last_for_vae=True)`
+  for generation tasks). The video VAE decode's conv activations are large
+  enough (~9 GB at 480² / 17 frames) that they won't fit on a card also holding
+  LLM layers. For generation, the LLM is sharded across the first `N-1` cards
+  and the last card is left empty of LLM weights so the VAE decode has a
+  near-full 12 GB to itself.
+
+**Resolution limit (important):** even a dedicated 12 GB card can't decode a
+768²×17-frame video — that single-chunk conv activation peaks just over 12 GB.
+480²×17 frames fits with ~2 GB to spare. Larger frames/resolution would need
+VAE **decode tiling** (spatial patches with overlap-blend), which is not
+implemented here. Note the launcher's `VIDEO_HEIGHT`/`VIDEO_WIDTH` default to
+**768**, independent of `--RESOLUTION`; pass `--VIDEO_HEIGHT 480 --VIDEO_WIDTH 480`
+for t2v on a 12 GB card.
+
+## Memory profile
+
+### Understanding (`x2t_image` / `x2t_video`), Lance_3B, 5 × 3060
 
 | Card | Holds | VRAM |
 |---|---|---|
-| cuda:0 | 3 LLM layers + embed + lm_head + ViT + VAE + latent_pos_embed + connectors + CUDA context | ~6 GB |
-| cuda:1 | 8 LLM layers | ~3 GB |
-| cuda:2 | 8 LLM layers | ~3 GB |
-| cuda:3 | 8 LLM layers | ~3 GB |
-| cuda:4 | 8 LLM layers | ~3 GB |
+| cuda:0 | ~3 LLM layers + embed + lm_head + ViT + VAE + latent_pos_embed + connectors + CUDA context | ~6 GB |
+| cuda:1–4 | ~8 LLM layers each | ~3 GB each |
 
-The smoke test (`x2t_image`, 768 res, 6 cases) completes successfully.
+### Generation (`t2v`, reserve-VAE-card), Lance_3B_Video, 480² / 17 frames
+
+| Card | Holds | VRAM |
+|---|---|---|
+| cuda:0 | ~4 LLM layers + embed + lm_head + ViT + connectors | ~5 GB |
+| cuda:1–3 | ~10–11 LLM layers each | ~3.7 GB each |
+| cuda:4 | VAE only (decode peaks here) | ~0.8 GB idle → ~5 GB during decode |
+
+Smoke tests confirmed: `x2t_image`, `x2t_video`, `t2i`, and `t2v` (480², 17
+frames, 1.42 s mp4) all complete on the 8 GB-RAM / 5×3060 host.
 
 ## Performance
 
@@ -152,8 +195,9 @@ setup, that's the one piece that's worth gating behind a flag.
 
 | File | Change |
 |---|---|
-| `inference_lance.py` | New `_build_lance_device_map`; `dispatch_model` import + call when sharding > 1; `shard_num_gpus` arg threading. |
+| `inference_lance.py` | New `_build_lance_device_map` (with `reserve_last_for_vae`); `dispatch_model` import + call when sharding > 1; `shard_num_gpus` arg threading; VAE built on the last shard. |
 | `inference_lance.sh` | `NUM_GPUS=5` default, `--num_processes 1`, passes `--shard_num_gpus`. |
 | `config/config_factory.py` | Adds `shard_num_gpus: int = 0` to `InferenceArguments`. |
 | `modeling/lance/lance.py` | New `_flex_mask_to_dense_list`; all three `create_block_mask` sites route through it. |
-| `modeling/lance/qwen2_navit.py` | Layer `attention_mask.to(device=…)` handles List; `Qwen2Model.forward_train` moves `packed_sequence` back to the index device after the layer loop. |
+| `modeling/lance/qwen2_navit.py` | Layer `attention_mask.to(device=…)` handles List; `Qwen2Model.forward_train` and the `forward_inference` gen-mode branch move the sequence back to the index device after the layer loop. |
+| `modeling/vae/wan/model.py` | `WanVideoVAE` accepts a `device=` override (default `get_device()`); `configure_vae_model`/`vae_encode`/`vae_decode` use it, so the VAE can live on a card other than cuda:0. |

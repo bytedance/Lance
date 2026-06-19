@@ -137,32 +137,38 @@ def _resolve_lance_checkpoint(model_path_dir: str) -> str:
     )
 
 
-def _build_lance_device_map(model: "Lance", num_gpus: int) -> Dict[str, int]:
-    """Spread Lance's LLM transformer layers across `num_gpus` cards.
+def _build_lance_device_map(model: "Lance", num_gpus: int, reserve_last_for_vae: bool = False) -> Dict[str, int]:
+    """Spread Lance's LLM transformer layers across the available cards.
 
-    cuda:0 is the "entry/exit" device for tokens and logits (embed + lm_head + norm),
-    and the WanVideoVAE always auto-lands on cuda:0 (its constructor calls
-    `get_device()` = cuda:LOCAL_RANK, which is cuda:0 in single-process mode and can't
-    easily be moved post-hoc). Those fixed-cost residents eat ~3-4 GB on cuda:0 before
-    a single LLM layer lands there, so we explicitly give cuda:0 a *reduced* layer
-    share when num_gpus >= 2 and park the ViT on the last GPU (typically the lightest
-    after layer-count remainder).
+    cuda:0 is the "entry/exit" device for tokens and logits (embed + lm_head + norm)
+    and also hosts the ViT. Those fixed-cost residents eat ~2-3 GB on cuda:0 before a
+    single LLM layer lands there, so we give cuda:0 a *reduced* layer share.
+
+    `reserve_last_for_vae`: when True (generation tasks), the LLM is sharded across
+    only the first `num_gpus - 1` cards, leaving the last GPU empty of LLM weights so
+    the WanVideoVAE (built on that card) has a near-full 12 GB for its decode. The
+    video VAE decode's conv activations (~9 GB at 480p/17 frames) won't fit on a card
+    that also holds LLM layers, so a dedicated card is the simplest robust fix.
     """
     num_layers = len(model.language_model.model.layers)
     num_gpus = max(1, num_gpus)
+
+    # Number of cards the LLM may use. Reserve the last one for the VAE on generation.
+    llm_gpus = num_gpus - 1 if (reserve_last_for_vae and num_gpus >= 2) else num_gpus
+    llm_gpus = max(1, llm_gpus)
+
     device_map: Dict[str, int] = {}
 
-    if num_gpus == 1:
-        # Everything on cuda:0. Almost certainly won't fit Lance_3B + VAE on a single
-        # 12 GB card — but that's the user's choice (smoke-test scenario only).
+    if llm_gpus == 1:
+        # All LLM layers on cuda:0 (single-GPU, or 2-GPU generation with VAE on cuda:1).
         for i in range(num_layers):
             device_map[f"language_model.model.layers.{i}"] = 0
     else:
         # cuda:0 gets roughly half its even share; the remainder spreads across
-        # cuda:1..N-1. For 36 layers / 5 GPUs that's 3 on cuda:0 and 8-9 elsewhere.
-        gpu0_layer_count = max(1, num_layers // (2 * num_gpus))
+        # cuda:1..llm_gpus-1. For 36 layers / 4 LLM cards that's 4 on cuda:0, ~11 each.
+        gpu0_layer_count = max(1, num_layers // (2 * llm_gpus))
         remaining = num_layers - gpu0_layer_count
-        other_gpus = num_gpus - 1
+        other_gpus = llm_gpus - 1
         layers_per_other = (remaining + other_gpus - 1) // other_gpus  # ceil-div
         for i in range(num_layers):
             if i < gpu0_layer_count:
@@ -193,9 +199,8 @@ def _build_lance_device_map(model: "Lance", num_gpus: int) -> Dict[str, int]:
     # ViT must live on cuda:0. Lance.validation_video_to_text combines ViT outputs
     # with embed_tokens outputs via `masked_scatter` inline (lance.py:1010) — that
     # combine happens in parent-class Python, not inside a submodule's forward(), so
-    # accelerate's hooks don't get a chance to align devices. cuda:0 now hosts only
-    # 3 LLM layers (instead of an even 8), so there's ~5 GB of headroom for the ViT
-    # (~1.2 GB) on top of the VAE/embed/lm_head residents.
+    # accelerate's hooks don't get a chance to align devices. cuda:0 gets a reduced
+    # LLM-layer share precisely so there's headroom for the ViT + embed + lm_head.
     if hasattr(model, "vit_model") and model.vit_model is not None:
         device_map["vit_model"] = 0
 
@@ -696,9 +701,16 @@ def main():
     if training_args.visual_gen:
         # WanVideoVAE itself uses torch.device("meta") + assign-load internally, so it
         # doesn't contribute to the CPU RAM spike. Built eagerly so vae_config is real.
+        # Place it on the lightest shard (the last GPU) when sharding across >1 card:
+        # cuda:0 is the most crowded device and the video VAE decode's conv activations
+        # OOM it. On a single GPU this resolves to cuda:0 (unchanged behavior).
+        num_visible_gpus = torch.cuda.device_count()
+        shard_n = inference_args.shard_num_gpus or num_visible_gpus
+        shard_n = max(1, min(shard_n, num_visible_gpus))
+        vae_device = torch.device("cuda", shard_n - 1)
         stage_start = time.perf_counter()
-        log_rank0("[startup] Initializing VAE")
-        vae_model = WanVideoVAE()
+        log_rank0(f"[startup] Initializing VAE on {vae_device}")
+        vae_model = WanVideoVAE(device=vae_device)
         vae_config: AutoEncoderParams = deepcopy(vae_model.vae_config)
         log_stage("VAE init", stage_start)
     else:
@@ -736,8 +748,12 @@ def main():
     num_visible_gpus = torch.cuda.device_count()
     shard_n = inference_args.shard_num_gpus or num_visible_gpus
     shard_n = max(1, min(shard_n, num_visible_gpus))
-    log_rank0(f"[startup] Sharding Lance across {shard_n} GPU(s) (visible: {num_visible_gpus})")
-    device_map = _build_lance_device_map(model, shard_n)
+    # Generation tasks decode through the VAE, whose video decode needs a near-full
+    # card to itself; reserve the last GPU for it (the VAE was built there above).
+    reserve_vae = bool(training_args.visual_gen) and inference_args.task in GENERATION_TASKS and shard_n >= 2
+    log_rank0(f"[startup] Sharding Lance across {shard_n} GPU(s) (visible: {num_visible_gpus}; "
+              f"reserve last GPU for VAE: {reserve_vae})")
+    device_map = _build_lance_device_map(model, shard_n, reserve_last_for_vae=reserve_vae)
 
     # ===== Stream-load weights directly onto each shard's GPU at bf16. =====
     # ViT weights live in a separate file; in the Lance wrapper they sit under vit_model.*.

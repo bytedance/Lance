@@ -312,6 +312,13 @@ class InferenceArguments(TrainingArguments):
     # >0 = shard Lance's LLM layers across this many GPUs via accelerate.dispatch_model.
     shard_num_gpus:             int = 0
 
+    # Spatial-tiled VAE decode for high-resolution video (see TILED_VAE.md):
+    #   0  = auto (tile when the latent spatial size exceeds an internal threshold)
+    #   >0 = tile whenever max(latent_h, latent_w) exceeds this many latent cells
+    #   <0 = never tile (force plain decode)
+    vae_tile_size:              int = 0
+    vae_tile_overlap:           int = 8  # latent cells of overlap between adjacent tiles
+
 
 @dataclass
 class EvaluationArguments(InferenceArguments):

@@ -709,8 +709,13 @@ def main():
         shard_n = max(1, min(shard_n, num_visible_gpus))
         vae_device = torch.device("cuda", shard_n - 1)
         stage_start = time.perf_counter()
-        log_rank0(f"[startup] Initializing VAE on {vae_device}")
-        vae_model = WanVideoVAE(device=vae_device)
+        log_rank0(f"[startup] Initializing VAE on {vae_device} "
+                  f"(tile_size={inference_args.vae_tile_size}, tile_overlap={inference_args.vae_tile_overlap})")
+        vae_model = WanVideoVAE(
+            device=vae_device,
+            tile_size=inference_args.vae_tile_size,
+            tile_overlap=inference_args.vae_tile_overlap,
+        )
         vae_config: AutoEncoderParams = deepcopy(vae_model.vae_config)
         log_stage("VAE init", stage_start)
     else:

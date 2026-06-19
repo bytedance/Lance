@@ -50,6 +50,8 @@ while [[ $# -gt 0 ]]; do
         --RESOLUTION) RESOLUTION="$2"; shift 2 ;;
         --TEXT_TEMPLATE) TEXT_TEMPLATE="$2"; shift 2 ;;
         --SAVE_PATH_GEN) SAVE_PATH_GEN="$2"; shift 2 ;;
+        --VAE_TILE) VAE_TILE="$2"; shift 2 ;;
+        --VAE_TILE_OVERLAP) VAE_TILE_OVERLAP="$2"; shift 2 ;;
 
         -h|--help)
             echo "Usage: bash inference_lance_my.sh [OPTIONS]"
@@ -122,6 +124,13 @@ echo ""
 CONFIG_ARGS=()
 if [ -n "$CONFIG_PATH" ]; then
     CONFIG_ARGS=(--val_dataset_config_file "$CONFIG_PATH")
+fi
+# Optional: spatial-tiled VAE decode for high-res video (see TILED_VAE.md).
+if [ -n "${VAE_TILE:-}" ]; then
+    CONFIG_ARGS+=(--vae_tile_size "$VAE_TILE")
+fi
+if [ -n "${VAE_TILE_OVERLAP:-}" ]; then
+    CONFIG_ARGS+=(--vae_tile_overlap "$VAE_TILE_OVERLAP")
 fi
 
 accelerate launch \

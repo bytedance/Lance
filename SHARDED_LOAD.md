@@ -143,9 +143,11 @@ needed a model-parallel fix:
 
 **Resolution limit (important):** even a dedicated 12 GB card can't decode a
 768²×17-frame video — that single-chunk conv activation peaks just over 12 GB.
-480²×17 frames fits with ~2 GB to spare. Larger frames/resolution would need
-VAE **decode tiling** (spatial patches with overlap-blend), which is not
-implemented here. Note the launcher's `VIDEO_HEIGHT`/`VIDEO_WIDTH` default to
+480²×17 frames fits with ~2 GB to spare. Larger frames/resolution use VAE
+**decode tiling** (spatial patches with overlap-blend) — see
+[`TILED_VAE.md`](TILED_VAE.md), implemented in `WanVideoVAE._tiled_decode`
+(auto-enabled above ~512², or `--VAE_TILE`). Note the launcher's
+`VIDEO_HEIGHT`/`VIDEO_WIDTH` default to
 **768**, independent of `--RESOLUTION`; pass `--VIDEO_HEIGHT 480 --VIDEO_WIDTH 480`
 for t2v on a 12 GB card.
 

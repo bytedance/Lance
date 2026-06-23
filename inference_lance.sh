@@ -125,7 +125,7 @@ CONFIG_ARGS=()
 if [ -n "$CONFIG_PATH" ]; then
     CONFIG_ARGS=(--val_dataset_config_file "$CONFIG_PATH")
 fi
-# Optional: spatial-tiled VAE decode for high-res video (see TILED_VAE.md).
+# Optional: spatial-tiled VAE decode for high-res video (see TILED_VAE_DECODE.md).
 if [ -n "${VAE_TILE:-}" ]; then
     CONFIG_ARGS+=(--vae_tile_size "$VAE_TILE")
 fi

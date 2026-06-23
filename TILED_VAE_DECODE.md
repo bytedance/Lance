@@ -3,6 +3,9 @@
 (The primary, implemented mechanism is spatial **tiling**; Approach B below —
 distributing tiles across GPUs — is the optional "sharded" extension.)
 
+> Companion: [`TILED_VAE_ENCODE.md`](TILED_VAE_ENCODE.md) covers the **encode** side
+> (for editing / i2v, which encode a source latent). This doc is decode-only.
+
 **Status:** Approach A (single-GPU spatial tiling) implemented **and validated**
 in-container — see "Validation results" below. Approach B (multi-GPU tile
 distribution) and the CPU fallbacks remain proposals.

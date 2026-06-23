@@ -15,7 +15,7 @@
 
 __all__ = ['WanVideoVAE']
 
-from typing import List
+from typing import List, Tuple
 import torch
 from torch import Tensor
 from einops import rearrange
@@ -33,7 +33,7 @@ def reparameterize(mu, log_var):
 
 
 # ---------------------------------------------------------------------------
-# Spatial-tiled VAE decode (see TILED_VAE.md).
+# Spatial-tiled VAE decode (see TILED_VAE_DECODE.md).
 #
 # The video VAE decode's conv activations for a single frame at full resolution
 # OOM a 12 GB card above ~480-512^2. The decode is already streamed temporally
@@ -99,7 +99,7 @@ class WanVideoVAE(object):
         self.configure_vae_model()
         self.use_sample = kwargs.get("use_sample", True)
 
-        # Spatial-tiled decode config (latent cells). See TILED_VAE.md.
+        # Spatial-tiled decode config (latent cells). See TILED_VAE_DECODE.md.
         #   tile_size > 0 : tile whenever max(h, w) > tile_size
         #   tile_size == 0: auto — tile when max(h, w) > _VAE_AUTO_TILE_THRESHOLD
         #   tile_size <  0: never tile (force plain decode)
@@ -136,6 +136,77 @@ class WanVideoVAE(object):
         self.vae.scale = [item.to(device=self.device) for item in self.vae.scale]
         return self
 
+    def _should_tile_encode(self, x: Tensor) -> bool:
+        """Decide whether to spatially tile the encode of pixel input x [1,C,T,H,W].
+        Threshold is applied to the *latent* grid size (H//downsample), to match the
+        decode-side `_should_tile` which thresholds on latent cells."""
+        if self.tile_size < 0:
+            return False
+        f = self.vae_config.downsample_spatial
+        h_lat, w_lat = x.shape[-2] // f, x.shape[-1] // f
+        threshold = self.tile_size if self.tile_size > 0 else _VAE_AUTO_TILE_THRESHOLD
+        return max(h_lat, w_lat) > threshold
+
+    def _tiled_encode(self, x: Tensor) -> Tuple[Tensor, Tensor]:
+        """Encode pixel input x [1,C,T,H,W] in overlapping spatial tiles and
+        feather-blend into full-resolution latent (mu, log_var). Mirror of
+        `_tiled_decode`, but the tiling unit is latent cells and the slicing happens
+        in pixel space (latent-cell-aligned, so tiles abut exactly). Each tile reuses
+        self.vae.encode, which resets its own temporal feat_cache, so every tile is a
+        correct independent temporal stream. Returns (mu, log_var), each [1,C,t,h,w].
+
+        Bounds the encode's full-resolution conv activations to one tile at a time —
+        the spatial analogue of the decode ceiling (see TILED_VAE_DECODE.md). mu and log_var
+        are blended (deterministic encoder outputs); reparameterize is applied later in
+        vae_encode on the stitched tensors, so per-tile noise never seams.
+        """
+        f = self.vae_config.downsample_spatial  # pixels per latent cell (16)
+        _, _, _, H, W = x.shape
+        h_lat, w_lat = H // f, W // f
+        tile = self.tile_size if self.tile_size > 0 else _VAE_DEFAULT_TILE
+        overlap = max(0, min(self.tile_overlap, tile // 2 - 1))
+        stride = max(1, tile - overlap)
+
+        row_starts = _tile_starts(h_lat, tile, stride)
+        col_starts = _tile_starts(w_lat, tile, stride)
+
+        mu_canvas = logvar_canvas = wsum = None
+        for r0 in row_starts:
+            r1 = min(r0 + tile, h_lat)
+            for c0 in col_starts:
+                c1 = min(c0 + tile, w_lat)
+                # latent-cell-aligned pixel slice -> encode -> [1,C,t,(r1-r0),(c1-c0)]
+                x_tile = x[:, :, :, r0 * f:r1 * f, c0 * f:c1 * f]
+                mu_t, logvar_t = self.vae.encode(x_tile)
+
+                if mu_canvas is None:
+                    C_lat, t_lat = mu_t.shape[1], mu_t.shape[2]
+                    mu_canvas = torch.zeros((1, C_lat, t_lat, h_lat, w_lat), dtype=mu_t.dtype, device=mu_t.device)
+                    logvar_canvas = torch.zeros_like(mu_canvas)
+                    wsum = torch.zeros((1, 1, 1, h_lat, w_lat), dtype=mu_t.dtype, device=mu_t.device)
+
+                wy = _blend_ramp_1d(r1 - r0, overlap, ramp_lo=(r0 != 0), ramp_hi=(r1 != h_lat),
+                                    device=mu_t.device, dtype=mu_t.dtype)
+                wx = _blend_ramp_1d(c1 - c0, overlap, ramp_lo=(c0 != 0), ramp_hi=(c1 != w_lat),
+                                    device=mu_t.device, dtype=mu_t.dtype)
+                w2d = (wy[:, None] * wx[None, :])[None, None, None, :, :]  # [1,1,1,dh,dw]
+
+                mu_canvas[:, :, :, r0:r1, c0:c1] += mu_t * w2d
+                logvar_canvas[:, :, :, r0:r1, c0:c1] += logvar_t * w2d
+                wsum[:, :, :, r0:r1, c0:c1] += w2d
+                del mu_t, logvar_t
+
+        wsum = wsum.clamp(min=1e-6)
+        mu_out, logvar_out = mu_canvas / wsum, logvar_canvas / wsum
+        # Flush all VAE-card work before the result is consumed. The VAE lives on a
+        # non-default device (cuda:N-1 under sharding) while the current device is
+        # cuda:0; the many per-tile kernels run async, and a downstream
+        # torch.cuda.empty_cache() in make_padded_latent can race them into an illegal
+        # memory access. Syncing this device makes the tiled encode safe without a
+        # global CUDA_LAUNCH_BLOCKING=1.
+        torch.cuda.synchronize(self.device)
+        return mu_out, logvar_out
+
     @torch.no_grad()
     def vae_encode(self, samples: List[Tensor], **kwargs) -> List[Tensor]:
         device = self.device
@@ -145,7 +216,10 @@ class WanVideoVAE(object):
             for x in samples:
                 x = x.to(device=device).unsqueeze(0)  # 1CTHW
 
-                u, log_var = self.vae.encode(x)  # [1,48,t,h,w], [1,48,t,h,w]
+                if self._should_tile_encode(x):
+                    u, log_var = self._tiled_encode(x)  # [1,48,t,h,w], [1,48,t,h,w]
+                else:
+                    u, log_var = self.vae.encode(x)  # [1,48,t,h,w], [1,48,t,h,w]
 
                 if self.use_sample:
                     u = reparameterize(u, log_var)  # [1,48,t,h,w]

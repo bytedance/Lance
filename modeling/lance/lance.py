@@ -479,7 +479,12 @@ class Lance(PreTrainedModel):
             num_vid_tokens = sum(num_vid_tokens_list)
             vae_position_ids = torch.cat(vae_position_ids, 0)
             if curr_padded_latent != []:
-                curr_padded_latent = torch.cat(curr_padded_latent, dim=0).to(dtype)
+                # Model-parallel: the source latent came from vae_encode on the
+                # reserved VAE card (e.g. cuda:4); the diffusion x_t, the index
+                # tensors, and the whole denoising loop run on `device` (cuda:0).
+                # Bring it to `device` so the later index-put against x_t doesn't
+                # cross devices (editing/i2v path only — t2v has no source latent).
+                curr_padded_latent = torch.cat(curr_padded_latent, dim=0).to(device=device, dtype=dtype)
 
             # 2. Reconstruct the input sequence and attention mask for the current sample
             current_sequence = torch.zeros((current_seq_len, self.hidden_size), device=device, dtype=dtype)
@@ -1519,7 +1524,12 @@ class Lance(PreTrainedModel):
             num_vid_tokens = sum(num_vid_tokens_list)
             vae_position_ids = torch.cat(vae_position_ids, 0)
             if curr_padded_latent != []:
-                curr_padded_latent = torch.cat(curr_padded_latent, dim=0).to(dtype)
+                # Model-parallel: the source latent came from vae_encode on the
+                # reserved VAE card (e.g. cuda:4); the diffusion x_t, the index
+                # tensors, and the whole denoising loop run on `device` (cuda:0).
+                # Bring it to `device` so the later index-put against x_t doesn't
+                # cross devices (editing/i2v path only — t2v has no source latent).
+                curr_padded_latent = torch.cat(curr_padded_latent, dim=0).to(device=device, dtype=dtype)
 
             # 2. Rebuild the input sequence and attention mask for the current sample.
             current_sequence = torch.zeros((current_seq_len, self.hidden_size), device=device, dtype=dtype)

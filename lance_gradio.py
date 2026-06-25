@@ -15,7 +15,11 @@ from typing import Optional
 
 os.environ.setdefault(
     "PYTORCH_CUDA_ALLOC_CONF",
-    os.getenv("LANCE_GRADIO_CUDA_ALLOC_CONF", "garbage_collection_threshold:0.8"),
+    # expandable_segments:True is required for the sharded streaming load — the
+    # per-tensor placement pattern otherwise fragments the caching allocator enough
+    # that large tensors fail to allocate despite free VRAM (see SHARDED_LOAD.md).
+    os.getenv("LANCE_GRADIO_CUDA_ALLOC_CONF",
+              "expandable_segments:True,garbage_collection_threshold:0.8"),
 )
 
 def _sanitize_no_proxy_for_httpx() -> None:
@@ -45,10 +49,10 @@ def _sanitize_no_proxy_for_httpx() -> None:
 
 _sanitize_no_proxy_for_httpx()
 
-from safetensors.torch import load_file
 import torch
 from transformers import set_seed
 from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
+from accelerate import init_empty_weights, dispatch_model
 
 from common.gradio_utils.helpers import *
 from common.gradio_utils.render import build_demo
@@ -62,9 +66,15 @@ from data.datasets_custom import ValidationDataset
 from inference_lance import (
     apply_inference_defaults,
     clean_memory,
-    init_from_model_path_if_needed,
     save_prompt_results,
     validate_on_fixed_batch,
+)
+from common.model.sharded_load import (
+    POPPED_FROM_CHECKPOINT,
+    build_lance_device_map,
+    materialize_remaining_meta,
+    resolve_lance_checkpoint,
+    stream_load_into,
 )
 from modeling.lance import Lance, LanceConfig, Qwen2ForCausalLM
 from modeling.qwen2 import Qwen2Tokenizer
@@ -73,13 +83,19 @@ from modeling.vae.wan.model import WanVideoVAE
 from modeling.vit.qwen2_5_vl_vit import Qwen2_5_VisionTransformerPretrainedModel
 
 class LanceT2VV2TPipeline:
-    def __init__(self, device_id: int, model_variant: str = MODEL_VARIANT_VIDEO) -> None:
+    def __init__(self, shard_gpus: list[int], model_variant: str = MODEL_VARIANT_VIDEO) -> None:
         self._init_lock = threading.Lock()
         self._generate_lock = threading.Lock()
         self.initialized = False
-        self.device = device_id
+        # The model is sharded (model-parallel) across these GPUs via
+        # accelerate.dispatch_model. `self.device` is the entry/exit card (where
+        # token inputs and final logits live = the device_map's cuda:0); the other
+        # shards hold later LLM layers and the VAE. See SHARDED_LOAD.md.
+        self.shard_gpus = list(shard_gpus)
+        self.shard_n = len(self.shard_gpus)
+        self.device = self.shard_gpus[0]
         self.model_variant = normalize_model_variant(model_variant)
-        self.logger = get_logger(f"lance_{self.model_variant}_gpu{device_id}")
+        self.logger = get_logger(f"lance_{self.model_variant}_shard{self.shard_n}")
 
         self.model: Optional[Lance] = None
         self.vae_model: Optional[WanVideoVAE] = None
@@ -179,10 +195,14 @@ class LanceT2VV2TPipeline:
             llm_config.freeze_und = inference_args.freeze_und
             llm_config.apply_qwen_2_5_vl_pos_emb = inference_args.apply_qwen_2_5_vl_pos_emb
 
+            # ===== Meta-init the skeleton (near-zero CPU RAM), then stream weights =====
+            # directly onto the GPU shards. Mirrors inference_lance.py main(); see
+            # LOW_RAM_LOAD.md / SHARDED_LOAD.md for rationale.
             stage_start = time.perf_counter()
-            print(f"[startup][gpu:{self.device}] Initializing LLM weights: {model_args.model_path}", flush=True)
-            language_model: Qwen2ForCausalLM = Qwen2ForCausalLM(llm_config)
-            self._log_stage("LLM weight init", stage_start)
+            print(f"[startup][gpu:{self.device}] Meta-initializing LLM: {model_args.model_path}", flush=True)
+            with init_empty_weights():
+                language_model: Qwen2ForCausalLM = Qwen2ForCausalLM(llm_config)
+            self._log_stage("LLM meta-init", stage_start)
 
             vit_model = None
             vit_config = None
@@ -195,20 +215,37 @@ class LanceT2VV2TPipeline:
                 self._log_stage("VIT config load", stage_start)
 
                 stage_start = time.perf_counter()
-                print(
-                    f"[startup][gpu:{self.device}] Loading VIT weights: {Path(model_args.vit_path) / 'vit.safetensors'}",
-                    flush=True,
+                print(f"[startup][gpu:{self.device}] Meta-initializing VIT", flush=True)
+                with init_empty_weights():
+                    vit_model = Qwen2_5_VisionTransformerPretrainedModel(vit_config)
+                self._log_stage("VIT meta-init", stage_start)
+
+            # Decide sharding + whether to reserve the last card for the VAE (generation).
+            num_visible_gpus = torch.cuda.device_count()
+            shard_n = max(1, min(self.shard_n, num_visible_gpus))
+            reserve_vae = bool(inference_args.visual_gen) and shard_n >= 2
+
+            # build_lance_device_map emits logical indices cuda:0..shard_n-1, and the
+            # entry/exit device (embed, lm_head, inputs) is cuda:0. So the shard set must
+            # be exactly 0..shard_n-1. Pick specific physical cards with
+            # CUDA_VISIBLE_DEVICES rather than a non-contiguous LANCE_GPUS.
+            if self.shard_gpus != list(range(shard_n)):
+                raise RuntimeError(
+                    f"Sharded Gradio expects contiguous GPUs 0..{shard_n - 1}, got "
+                    f"LANCE_GPUS={self.shard_gpus}. Use LANCE_GPUS=0,1,...,{shard_n - 1} "
+                    "and select physical cards with CUDA_VISIBLE_DEVICES."
                 )
-                vit_model = Qwen2_5_VisionTransformerPretrainedModel(vit_config)
-                vit_weights = load_file(str(Path(model_args.vit_path) / "vit.safetensors"))
-                vit_model.load_state_dict(vit_weights, strict=True)
-                self._log_stage("VIT weight load", stage_start)
-                clean_memory(vit_weights)
 
             if inference_args.visual_gen:
+                vae_device = torch.device("cuda", (shard_n - 1) if reserve_vae else 0)
                 stage_start = time.perf_counter()
-                print(f"[startup][gpu:{self.device}] Initializing VAE", flush=True)
-                vae_model = WanVideoVAE(device=torch.device("cuda", self.device))
+                print(f"[startup][gpu:{self.device}] Initializing VAE on {vae_device} "
+                      f"(tile_size={inference_args.vae_tile_size}, tile_overlap={inference_args.vae_tile_overlap})", flush=True)
+                vae_model = WanVideoVAE(
+                    device=vae_device,
+                    tile_size=inference_args.vae_tile_size,
+                    tile_overlap=inference_args.vae_tile_overlap,
+                )
                 vae_config = deepcopy(vae_model.vae_config)
                 self._log_stage("VAE init", stage_start)
             else:
@@ -229,29 +266,53 @@ class LanceT2VV2TPipeline:
                 interpolate_pos=model_args.interpolate_pos,
                 timestep_shift=inference_args.timestep_shift,
             )
-            model: Lance = Lance(
-                language_model=language_model,
-                vit_model=vit_model if inference_args.visual_und else None,
-                vit_type=model_args.vit_type,
-                config=config,
-                training_args=inference_args,
-            )
-
             stage_start = time.perf_counter()
-            print(f"[startup][gpu:{self.device}] Casting Lance model to bf16 on CPU", flush=True)
-            model = model.to(dtype=torch.bfloat16)
-            self._log_stage("Lance model bf16 cast", stage_start)
+            print(f"[startup][gpu:{self.device}] Meta-initializing Lance wrapper", flush=True)
+            with init_empty_weights():
+                model: Lance = Lance(
+                    language_model=language_model,
+                    vit_model=vit_model if inference_args.visual_und else None,
+                    vit_type=model_args.vit_type,
+                    config=config,
+                    training_args=inference_args,
+                )
+            self._log_stage("Lance meta-init", stage_start)
+
+            print(f"[startup][gpu:{self.device}] Sharding Lance across {shard_n} GPU(s) "
+                  f"(visible: {num_visible_gpus}; reserve last GPU for VAE: {reserve_vae})", flush=True)
+            device_map = build_lance_device_map(model, shard_n, reserve_last_for_vae=reserve_vae)
+
+            # Stream weights onto the shards at bf16 (ViT keys live under vit_model.*).
+            if inference_args.visual_und:
+                vit_safetensors = str(Path(model_args.vit_path) / "vit.safetensors")
+                stage_start = time.perf_counter()
+                print(f"[startup][gpu:{self.device}] Streaming VIT weights from {vit_safetensors}", flush=True)
+                vit_loaded, vit_unknown = stream_load_into(
+                    model, vit_safetensors, device_map, key_prefix="vit_model.", dtype=torch.bfloat16,
+                )
+                self._log_stage("VIT streaming load", stage_start,
+                                extra=f"loaded={len(vit_loaded)} unknown={len(vit_unknown)}")
+
+            lance_ckpt = resolve_lance_checkpoint(model_args.model_path)
+            stage_start = time.perf_counter()
+            print(f"[startup][gpu:{self.device}] Streaming Lance checkpoint from {lance_ckpt}", flush=True)
+            main_loaded, main_unknown = stream_load_into(
+                model, lance_ckpt, device_map, skip_keys=POPPED_FROM_CHECKPOINT, dtype=torch.bfloat16,
+            )
+            self._log_stage("Lance streaming load", stage_start,
+                            extra=f"loaded={len(main_loaded)} unknown={len(main_unknown)}")
+
+            # Materialize any params left on meta (the popped sin-cos pos_embed).
+            materialize_remaining_meta(model, device_map, dtype=torch.bfloat16)
+
+            # init_moe() is skipped: the full checkpoint already contains the moe_gen
+            # weights (running it on the sharded model would clobber them cross-device).
 
             stage_start = time.perf_counter()
             print(f"[startup][gpu:{self.device}] Loading tokenizer: {model_args.model_path}", flush=True)
             tokenizer: Qwen2Tokenizer = Qwen2Tokenizer.from_pretrained(model_args.model_path)
             tokenizer, new_token_ids, num_new_tokens = add_special_tokens(tokenizer)
             self._log_stage("tokenizer load and special token init", stage_start, extra=f"num_new_tokens={num_new_tokens}")
-
-            if inference_args.copy_init_moe:
-                language_model.init_moe()
-
-            init_from_model_path_if_needed(model, model_args)
 
             if num_new_tokens > 0:
                 model.language_model.resize_token_embeddings(len(tokenizer))
@@ -278,10 +339,10 @@ class LanceT2VV2TPipeline:
                     != model.language_model.get_output_embeddings().weight.data.data_ptr()
                 ), "tie_word_embeddings conflict"
 
-            stage_start = time.perf_counter()
-            print(f"[startup][gpu:{self.device}] Moving Lance model to GPU {self.device}", flush=True)
-            model = model.to(device=self.device)
-            self._log_stage("Lance model move to GPU", stage_start)
+            # Cross-device hooks so activations flow between shards. After this the model
+            # must NOT be .to()'d (that would collapse every shard onto one card).
+            if shard_n > 1:
+                model = dispatch_model(model, device_map=device_map)
             model.eval()
             if vae_model is not None and hasattr(vae_model, "eval"):
                 vae_model.eval()
@@ -300,8 +361,11 @@ class LanceT2VV2TPipeline:
 
     def unload(self) -> None:
         with self._init_lock:
-            if self.model is not None:
-                self.model.cpu()
+            # NOTE: do NOT call .cpu()/.to() on `self.model` — it's sharded via
+            # accelerate.dispatch_model, which raises on a whole-model device move.
+            # Dropping the references + empty_cache below frees the GPU memory across
+            # all shards. The VAE is a plain module on its own card, so moving it off
+            # is fine and helps release that card promptly.
             if self.vae_model is not None and hasattr(self.vae_model, "vae"):
                 vae_inner = self.vae_model.vae
                 if hasattr(vae_inner, "model"):
@@ -319,9 +383,11 @@ class LanceT2VV2TPipeline:
             self.initialized = False
             gc.collect()
             if torch.cuda.is_available():
-                with torch.cuda.device(self.device):
-                    torch.cuda.empty_cache()
-                    torch.cuda.ipc_collect()
+                # The model was sharded across all of self.shard_gpus; free each card.
+                for gpu in self.shard_gpus:
+                    with torch.cuda.device(gpu):
+                        torch.cuda.empty_cache()
+                        torch.cuda.ipc_collect()
 
     def _build_request_batch(
         self,
@@ -614,9 +680,12 @@ class PipelinePool:
             raise ValueError("At least one GPU must be configured.")
         self.gpu_ids = gpu_ids
         self.model_variant = normalize_model_variant(model_variant)
+        # One model sharded (model-parallel) across ALL the GPUs — not one full replica
+        # per GPU. A single sharded model can't serve concurrent requests (and the app
+        # runs with concurrency_limit=1), so the pool holds exactly one pipeline; the
+        # deque/acquire/release machinery still works with a 1-element list.
         self.pipelines = [
-            LanceT2VV2TPipeline(device_id=gpu_id, model_variant=self.model_variant)
-            for gpu_id in gpu_ids
+            LanceT2VV2TPipeline(shard_gpus=gpu_ids, model_variant=self.model_variant)
         ]
         self._available = deque(self.pipelines)
         self._condition = threading.Condition()

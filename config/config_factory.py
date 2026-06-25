@@ -306,7 +306,7 @@ class InferenceArguments(TrainingArguments):
     system_prompt_type:         str = "SP0"  # options: SP1, SP2 ...
     use_KVcache:                bool = False
     enhance_prompt:             bool = False  # Rewrite T2V prompts before inference when enabled.
-    memory_mode:                str = "parallel"  # parallel | vae_relay | relay. Relay is t2i + KV-cache only.
+    memory_mode:                str = "parallel"  # parallel | relay. Relay is t2i + KV-cache only.
     relay_memory_log:           bool = False  # Print CUDA allocator usage at relay phase boundaries.
 
 

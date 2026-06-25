@@ -15,7 +15,7 @@ VALIDATION_DATA_SEED=${VALIDATION_DATA_SEED:-42}
 CFG_TEXT_SCALE=${CFG_TEXT_SCALE:-4.0}
 USE_KVCACHE=${USE_KVCACHE:-true}
 ENHANCE_PROMPT=${ENHANCE_PROMPT:-false}
-MEMORY_MODE=${MEMORY_MODE:-parallel}       # parallel | vae_relay | relay
+MEMORY_MODE=${MEMORY_MODE:-parallel}       # parallel | relay
 RELAY_MEMORY_LOG=${RELAY_MEMORY_LOG:-false}
 
 NUM_FRAMES=${NUM_FRAMES:-50}             # max: 121 frames, unused for image tasks
@@ -52,14 +52,14 @@ while [[ $# -gt 0 ]]; do
         --SAVE_PATH_GEN) SAVE_PATH_GEN="$2"; shift 2 ;;
 
         -h|--help)
-            echo "Usage: bash inference_lance_my.sh [OPTIONS]"
+            echo "Usage: bash inference_lance.sh [OPTIONS]"
             echo ""
             echo "Example:"
-            echo "  bash inference_lance_my.sh --TASK_NAME t2i --MODEL_PATH downloads/Lance_3B --RESOLUTION image_768res"
-            echo "  bash inference_lance_my.sh --TASK_NAME image_edit --CONFIG_PATH config.json"
-            echo "  bash inference_lance_my.sh --TASK_NAME t2v --ENHANCE_PROMPT true"
-            echo "  bash inference_lance_my.sh --TASK_NAME i2v --ENHANCE_PROMPT true"
-            echo "  bash inference_lance_my.sh --TASK_NAME t2i --MODEL_PATH downloads/Lance_3B --MEMORY_MODE relay --RELAY_MEMORY_LOG true"
+            echo "  bash inference_lance.sh --TASK_NAME t2i --MODEL_PATH downloads/Lance_3B --RESOLUTION image_768res"
+            echo "  bash inference_lance.sh --TASK_NAME image_edit --CONFIG_PATH config.json"
+            echo "  bash inference_lance.sh --TASK_NAME t2v --ENHANCE_PROMPT true"
+            echo "  bash inference_lance.sh --TASK_NAME i2v --ENHANCE_PROMPT true"
+            echo "  bash inference_lance.sh --TASK_NAME t2i --MODEL_PATH downloads/Lance_3B --MEMORY_MODE relay --RELAY_MEMORY_LOG true"
             exit 0
             ;;
 

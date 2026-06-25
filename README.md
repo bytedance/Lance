@@ -127,7 +127,7 @@ We are actively updating and improving this repository. If you find any bugs or 
 ### Recommended Environment
 
 - **Software:** Python 3.10+, CUDA 12.4+ (required)
-- **Hardware:** A GPU with at least 40GB VRAM is required for inference
+- **Hardware:** Default parallel inference requires a GPU with at least 40GB VRAM. For text-to-image only, `MEMORY_MODE=relay` lowers peak GPU memory by loading the UND tower, GEN tower, and VAE only for the phase that needs them.
 
 We have tested the following dependency combinations on NVIDIA A100:
 
@@ -248,6 +248,24 @@ bash inference_lance.sh \
   --SAVE_PATH_GEN results/t2i
 ```
 
+##### Low-Memory Text-to-Image Relay
+
+`MEMORY_MODE=parallel` is the default and fastest path. For text-to-image inference with KV-cache enabled, `MEMORY_MODE=relay` runs the same T2I pipeline while relaying the UND tower, GEN tower, and VAE through GPU memory one phase at a time. Relay is slower, but it can substantially reduce peak GPU memory and is intended to produce bit-identical images to `parallel` on the same hardware and software stack with the same seed and settings.
+
+```bash
+bash inference_lance.sh \
+  --TASK_NAME t2i \
+  --MODEL_PATH downloads/Lance_3B \
+  --RESOLUTION image_768res \
+  --VIDEO_HEIGHT 768 \
+  --VIDEO_WIDTH 768 \
+  --USE_KVCACHE true \
+  --MEMORY_MODE relay \
+  --SAVE_PATH_GEN results/t2i_relay
+```
+
+Current relay support is limited to `t2i` with `--USE_KVCACHE true`. Use `--RELAY_MEMORY_LOG true` to print CUDA allocator summaries at relay phase boundaries. To compare `parallel` and `relay` outputs on your machine, run `python tools/compare_memory_modes_t2i.py --model-path downloads/Lance_3B`.
+
 ##### Video Editing
 
 ```bash
@@ -331,6 +349,8 @@ You can configure the following hyperparameters at the top of the `inference_lan
 | `RESOLUTION` | `"video_480p"` | Base resolution preset (`image_768res` or `video_480p`). |
 | `CONFIG_PATH` | `""` | Optional path to a custom validation JSON/JSONL file. When empty, the task default example config is used. |
 | `ENHANCE_PROMPT` | `false` | Optional T2V/I2V prompt rewrite switch. T2V uses text-only rewrite; I2V uses text plus the input image. Prompt enhancement generally improves generation quality. This option requires `openai==2.26.0`; it is included in `requirements.txt`, or install it manually with `pip install openai==2.26.0`. Configure `LANCE_REWRITE_API_KEY`, `LANCE_REWRITE_MODEL_NAME`, and `LANCE_REWRITE_BASE_URL` through environment variables before setting this to `true`. Never store a real API key in repository source files. |
+| `MEMORY_MODE` | `parallel` | GPU memory policy. Use `parallel` for the default fastest path, or `relay` for low-memory T2I with KV-cache. |
+| `RELAY_MEMORY_LOG` | `false` | Print CUDA allocator summaries at relay phase boundaries when using `MEMORY_MODE=relay`. |
 
 </details>
 

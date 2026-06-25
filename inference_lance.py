@@ -79,11 +79,9 @@ UNDERSTANDING_TASKS = {
     TASK_X2T_VIDEO,
 }
 MEMORY_MODE_PARALLEL = "parallel"
-MEMORY_MODE_VAE_RELAY = "vae_relay"
 MEMORY_MODE_RELAY = "relay"
 VALID_MEMORY_MODES = {
     MEMORY_MODE_PARALLEL,
-    MEMORY_MODE_VAE_RELAY,
     MEMORY_MODE_RELAY,
 }
 TASK_DEFAULT_CONFIGS = {
@@ -126,15 +124,6 @@ TASK_DEFAULT_CONFIGS = {
 
 def normalize_memory_mode(memory_mode: str) -> str:
     memory_mode = (memory_mode or MEMORY_MODE_PARALLEL).strip().lower()
-    aliases = {
-        "none": MEMORY_MODE_PARALLEL,
-        "default": MEMORY_MODE_PARALLEL,
-        "vae": MEMORY_MODE_VAE_RELAY,
-        "vae-relay": MEMORY_MODE_VAE_RELAY,
-        "tower_relay": MEMORY_MODE_RELAY,
-        "tower-relay": MEMORY_MODE_RELAY,
-    }
-    memory_mode = aliases.get(memory_mode, memory_mode)
     if memory_mode not in VALID_MEMORY_MODES:
         raise ValueError(f"memory_mode must be one of {sorted(VALID_MEMORY_MODES)}, got {memory_mode!r}")
     return memory_mode
@@ -146,10 +135,6 @@ def validate_memory_mode(memory_mode: str, inference_args: InferenceArguments) -
             raise ValueError("memory_mode='relay' is currently implemented only for t2i image generation.")
         if not inference_args.use_KVcache:
             raise ValueError("memory_mode='relay' requires --use_KVcache true.")
-
-
-def uses_vae_relay(memory_mode: str) -> bool:
-    return memory_mode in {MEMORY_MODE_VAE_RELAY, MEMORY_MODE_RELAY}
 
 
 def log_cuda_memory(stage_name: str, enabled: bool, rank0_log=print, device: Optional[int] = None) -> None:
@@ -418,7 +403,6 @@ def validate_on_fixed_batch(
 ):
     memory_mode = normalize_memory_mode(inference_args.memory_mode)
     relay_enabled = memory_mode == MEMORY_MODE_RELAY
-    vae_relay_enabled = uses_vae_relay(memory_mode)
 
     def ensure_vae_model(current_vae_model: Optional[WanVideoVAE]) -> WanVideoVAE:
         if current_vae_model is None:
@@ -436,12 +420,12 @@ def validate_on_fixed_batch(
         # Compute padded_latent.
         if "padded_videos" in val_data.keys():
             needs_vae_encode = any(str(mode).lower().startswith("on") for mode in val_data["vae_data_mode"])
-            if vae_relay_enabled and needs_vae_encode:
+            if relay_enabled and needs_vae_encode:
                 vae_model = ensure_vae_model(vae_model)
                 vae_model.to(torch.device("cuda", device))
                 log_cuda_memory("after VAE materialize for encode", inference_args.relay_memory_log, device=device)
             val_data["padded_latent"] = make_padded_latent(val_data["padded_videos"], val_data["vae_data_mode"], vae_model)
-            if vae_relay_enabled and needs_vae_encode and vae_model is not None:
+            if relay_enabled and needs_vae_encode and vae_model is not None:
                 vae_model.to("cpu")
                 clean_memory()
                 log_cuda_memory("after VAE encode offload", inference_args.relay_memory_log, device=device)
@@ -495,12 +479,9 @@ def validate_on_fixed_batch(
             else:
                 denoise_latent, captions, padded_videos, index = fsdp_model.validation_gen(**params)
 
-            if vae_relay_enabled:
+            if relay_enabled:
                 log_cuda_memory("before Lance offload for VAE decode", inference_args.relay_memory_log, device=device)
-                if relay_enabled:
-                    fsdp_model.relay_discard_all()
-                else:
-                    fsdp_model = fsdp_model.to("cpu")
+                fsdp_model.relay_discard_all()
                 clean_memory()
                 log_cuda_memory("after Lance release for VAE decode", inference_args.relay_memory_log, device=device)
                 vae_model = ensure_vae_model(vae_model)
@@ -536,7 +517,7 @@ def validate_on_fixed_batch(
                 clean_memory()
 
             del denoise_latent, captions, padded_videos, params
-            if vae_relay_enabled and vae_model is not None:
+            if relay_enabled and vae_model is not None:
                 vae_model.to("cpu")
                 clean_memory()
                 log_cuda_memory("after VAE offload", inference_args.relay_memory_log, device=device)
@@ -617,7 +598,6 @@ def main():
     validate_memory_mode(inference_args.memory_mode, inference_args)
     training_args.validation_noise_seed = training_args.validation_data_seed
     relay_enabled = inference_args.memory_mode == MEMORY_MODE_RELAY
-    vae_relay_enabled = uses_vae_relay(inference_args.memory_mode)
 
     logger = get_logger()
     log_rank0 = (lambda *args, **kwargs: print(*args, **kwargs, flush=True)) if GLOBAL_RANK == 0 else (lambda *_args, **_kwargs: None)  # Only print on rank 0.
@@ -693,9 +673,8 @@ def main():
                 vae_config = wan_vae_config()
                 log_rank0("[startup] Deferring VAE weight load until relay decode")
             else:
-                vae_device = "cpu" if vae_relay_enabled else DEVICE
-                log_rank0(f"[startup] Initializing VAE on {vae_device}")
-                vae_model = WanVideoVAE(device=vae_device)
+                log_rank0(f"[startup] Initializing VAE on {DEVICE}")
+                vae_model = WanVideoVAE(device=DEVICE)
                 vae_config: AutoEncoderParams = deepcopy(vae_model.vae_config)
                 log_stage("VAE init", stage_start)
         else:

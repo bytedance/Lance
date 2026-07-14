@@ -6,13 +6,24 @@ import threading
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-GRADIO_TMP_ROOT = Path(os.getenv("LANCE_GRADIO_TMP_ROOT", "/tmp/lance_gradio")).expanduser()
+GRADIO_TMP_ROOT = Path(
+    os.getenv("LANCE_GRADIO_TMP_ROOT", "/tmp/lance_gradio")
+).expanduser()
 TMP_INPUT_DIR = GRADIO_TMP_ROOT / "inputs"
 RESULTS_ROOT = GRADIO_TMP_ROOT / "results"
 PREVIEW_VIDEO_DIR = GRADIO_TMP_ROOT / "preview_videos"
 GLOBAL_RECORDS_FILE = GRADIO_TMP_ROOT / "generation_records.jsonl"
 RUN_RECORD_FILENAME = "generation_record.json"
 PROMPT_JSON_FILENAME = "prompt.json"
+
+# Only these repository directories contain browser-visible example media.
+GRADIO_STATIC_MEDIA_DIRS = (
+    REPO_ROOT / "config" / "examples" / "text_image_to_video_examples",
+    REPO_ROOT / "config" / "examples" / "image_edit_examples",
+    REPO_ROOT / "config" / "examples" / "video_edit_examples",
+    REPO_ROOT / "assets" / "image-understanding" / "cases",
+    REPO_ROOT / "assets" / "video-understanding" / "videos",
+)
 
 LOCAL_MODEL_BASE_DIR = Path("downloads")
 DEFAULT_MODEL_VARIANT = "video"

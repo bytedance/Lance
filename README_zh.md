@@ -226,7 +226,15 @@ bash inference_lance.sh \
 
 生成任务可选参数：
 
-- `--ENHANCE_PROMPT true`：启用 T2V/I2V prompt rewrite。T2V 使用纯文本 rewrite，I2V 使用文本加输入图像 rewrite。prompt rewrite 通常能提升生成效果。该选项需要 `openai==2.26.0`，已写入 `requirements.txt`；如果没有通过 `requirements.txt` 安装依赖，请先执行 `pip install openai==2.26.0`。启用前请先在 `common/utils/caption_rewrite.py` 中配置 `API_KEY`、`MODEL_NAME` 和 `BASE_URL`；如果没有配置有效 rewrite 参数，会自动跳过 prompt rewrite，此时建议尽量参考提供示例中的 prompt 风格手写输入。
+- `--ENHANCE_PROMPT true`：启用 T2V/I2V 提示词改写。提示词增强通常能提升生成效果。该选项需要 `openai==2.26.0`，已写入 `requirements.txt`；如果没有通过 `requirements.txt` 安装依赖，请先执行 `pip install openai==2.26.0`。启用前请通过环境变量配置提示词改写服务。切勿将真实 API Key 写入仓库源文件：
+
+  ```bash
+  export LANCE_REWRITE_API_KEY="your-api-key"
+  export LANCE_REWRITE_MODEL_NAME="your-model-name"
+  export LANCE_REWRITE_BASE_URL="https://api.openai.com/v1"
+  ```
+
+  如果未提供有效的提示词改写配置，程序会跳过提示词改写；此时建议**参考所提供示例的提示词风格编写提示词**。
 
 ##### 文生图
 
@@ -321,17 +329,13 @@ bash inference_lance.sh \
 | `VIDEO_HEIGHT` / `VIDEO_WIDTH`| `768` | 空间分辨率。*编辑任务不使用该参数（由输入图像/视频决定）。* |
 | `RESOLUTION` | `"video_480p"` | 基础分辨率预设（如 `image_768res` 或 `video_480p`）。 |
 | `CONFIG_PATH` | `""` | 可选的自定义验证 JSON/JSONL 文件路径。为空时使用任务默认示例配置。 |
-| `ENHANCE_PROMPT` | `false` | 可选的 T2V/I2V prompt rewrite 开关。T2V 使用纯文本 rewrite，I2V 使用文本加输入图像 rewrite。prompt rewrite 通常能提升生成效果。该选项需要 `openai==2.26.0`，已写入 `requirements.txt`；也可以手动执行 `pip install openai==2.26.0`。启用前请先在 `common/utils/caption_rewrite.py` 中配置 `API_KEY`、`MODEL_NAME` 和 `BASE_URL`；如果没有有效 rewrite 参数，建议尽量参考提供示例中的 prompt 风格手写输入。 |
+| `ENHANCE_PROMPT` | `false` | 可选的 T2V/I2V 提示词改写开关。T2V 使用纯文本改写，I2V 使用文本和输入图像进行改写。提示词增强通常能提升生成效果。该选项需要 `openai==2.26.0`，已写入 `requirements.txt`；也可以手动执行 `pip install openai==2.26.0`。将此项设为 `true` 前，请通过环境变量配置 `LANCE_REWRITE_API_KEY`、`LANCE_REWRITE_MODEL_NAME` 和 `LANCE_REWRITE_BASE_URL`。切勿将真实 API Key 存储在仓库源文件中。 |
 
 </details>
 
 ### 🖥️ Gradio
 
-你可以启动本地 Gradio demo，体验视频/图像生成、编辑和理解：
-
-```bash
-python lance_gradio.py --server-name 0.0.0.0 --server-port 7860
-```
+使用 `python lance_gradio.py --server-name 127.0.0.1 --server-port 7860` 启动本地 Gradio demo。
 
 ### 基准评测
 

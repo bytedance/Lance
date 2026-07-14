@@ -226,7 +226,15 @@ bash inference_lance.sh \
 
 Optional parameters for video generation task examples:
 
-- `--ENHANCE_PROMPT true`: enable prompt rewrite for T2V/I2V. Prompt enhancement generally improves generation quality. This option requires `openai==2.26.0`, which is already listed in `requirements.txt`; if you did not install from `requirements.txt`, run `pip install openai==2.26.0` first. Before enabling it, set `API_KEY`, `MODEL_NAME`, and `BASE_URL` in `common/utils/caption_rewrite.py`. If no valid rewrite config is provided there, prompt rewrite is skipped; in that case, we recommend **writing prompts in the style of the provided examples**.
+- `--ENHANCE_PROMPT true`: enable prompt rewrite for T2V/I2V. Prompt enhancement generally improves generation quality. This option requires `openai==2.26.0`, which is already listed in `requirements.txt`; if you did not install from `requirements.txt`, run `pip install openai==2.26.0` first. Configure the rewrite service through environment variables before enabling it. Never place a real API key in repository source files:
+
+  ```bash
+  export LANCE_REWRITE_API_KEY="your-api-key"
+  export LANCE_REWRITE_MODEL_NAME="your-model-name"
+  export LANCE_REWRITE_BASE_URL="https://api.openai.com/v1"
+  ```
+
+  If no valid rewrite configuration is provided, prompt rewrite is skipped; in that case, we recommend **writing prompts in the style of the provided examples**.
 
 ##### Text-to-Image
 
@@ -322,17 +330,13 @@ You can configure the following hyperparameters at the top of the `inference_lan
 | `VIDEO_HEIGHT` / `VIDEO_WIDTH`| `768` | Spatial resolution. *Unused for editing tasks (determined by input image/video).* |
 | `RESOLUTION` | `"video_480p"` | Base resolution preset (`image_768res` or `video_480p`). |
 | `CONFIG_PATH` | `""` | Optional path to a custom validation JSON/JSONL file. When empty, the task default example config is used. |
-| `ENHANCE_PROMPT` | `false` | Optional T2V/I2V prompt rewrite switch. T2V uses text-only rewrite; I2V uses text plus the input image. Prompt enhancement generally improves generation quality. This option requires `openai==2.26.0`; it is included in `requirements.txt`, or install it manually with `pip install openai==2.26.0`. Configure `API_KEY`, `MODEL_NAME`, and `BASE_URL` in `common/utils/caption_rewrite.py` before setting this to `true`; without a valid rewrite config, we recommend writing prompts in the style of the provided examples. |
+| `ENHANCE_PROMPT` | `false` | Optional T2V/I2V prompt rewrite switch. T2V uses text-only rewrite; I2V uses text plus the input image. Prompt enhancement generally improves generation quality. This option requires `openai==2.26.0`; it is included in `requirements.txt`, or install it manually with `pip install openai==2.26.0`. Configure `LANCE_REWRITE_API_KEY`, `LANCE_REWRITE_MODEL_NAME`, and `LANCE_REWRITE_BASE_URL` through environment variables before setting this to `true`. Never store a real API key in repository source files. |
 
 </details>
 
 ### 🖥️ Gradio
 
-You can launch the local Gradio demo for video/image generation, editing, and understanding:
-
-```bash
-python lance_gradio.py --server-name 0.0.0.0 --server-port 7860
-```
+Launch the Gradio demo locally with `python lance_gradio.py --server-name 127.0.0.1 --server-port 7860`.
 
 ### Benchmarks
 

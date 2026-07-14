@@ -17,10 +17,14 @@ if __package__ in (None, ""):
 
 import openai
 
-# NOTE: Replace the following few lines for the model you want to use.
-API_KEY = "YOUR_API_KEY"
-MODEL_NAME = "YOUR_MODEL_NAME"
-BASE_URL = "https://api.openai.com/v1"
+# Rewrite service configuration must be supplied through environment variables.
+# Never place real API keys in this source file.
+API_KEY = os.getenv("LANCE_REWRITE_API_KEY", "")
+MODEL_NAME = os.getenv("LANCE_REWRITE_MODEL_NAME", "")
+BASE_URL = os.getenv(
+    "LANCE_REWRITE_BASE_URL",
+    "https://api.openai.com/v1",
+)
 MAX_TOKENS = 2048
 THINKING_ENABLED = False
 THINKING_BUDGET_TOKENS = 2000
@@ -48,12 +52,12 @@ def get_rewrite_config_error(api_key: str | None = None) -> str | None:
     model_name = MODEL_NAME.strip() if isinstance(MODEL_NAME, str) else MODEL_NAME
     base_url = BASE_URL.strip() if isinstance(BASE_URL, str) else BASE_URL
 
-    if not key or key.startswith("YOUR_"):
-        return "API_KEY is not configured."
-    if not model_name or model_name.startswith("YOUR_"):
-        return "MODEL_NAME is not configured."
-    if not base_url or base_url.startswith("YOUR_"):
-        return "BASE_URL is not configured."
+    if not key:
+        return "LANCE_REWRITE_API_KEY is not configured."
+    if not model_name:
+        return "LANCE_REWRITE_MODEL_NAME is not configured."
+    if not base_url:
+        return "LANCE_REWRITE_BASE_URL is not configured."
     if not (base_url.startswith("http://") or base_url.startswith("https://")):
         return f"BASE_URL should start with http:// or https://, got: {base_url}"
 
@@ -65,7 +69,8 @@ def has_valid_rewrite_config(api_key: str | None = None) -> bool:
     if error:
         warnings.warn(
             f"Prompt rewrite is disabled: {error} "
-            "Please configure API_KEY, MODEL_NAME, and BASE_URL before using --ENHANCE_PROMPT true.",
+            "Configure LANCE_REWRITE_API_KEY, LANCE_REWRITE_MODEL_NAME, "
+            "and LANCE_REWRITE_BASE_URL before using --ENHANCE_PROMPT true.",
             RuntimeWarning,
         )
         return False
@@ -288,8 +293,9 @@ def main() -> None:
     config_error = get_rewrite_config_error()
     if config_error:
         parser.error(
-            f"{config_error} Set API_KEY, MODEL_NAME, and BASE_URL at the top of this file "
-            "or configure them before using --ENHANCE_PROMPT true."
+            f"{config_error} Configure LANCE_REWRITE_API_KEY, "
+            "LANCE_REWRITE_MODEL_NAME, and LANCE_REWRITE_BASE_URL "
+            "before using --ENHANCE_PROMPT true."
         )
 
     if args.mode == "i2v":

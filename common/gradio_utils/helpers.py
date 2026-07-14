@@ -110,6 +110,7 @@ def ensure_model_assets(model_variant: Optional[str] = None) -> Path:
 def ensure_dirs() -> None:
     TMP_INPUT_DIR.mkdir(parents=True, exist_ok=True)
     RESULTS_ROOT.mkdir(parents=True, exist_ok=True)
+    PREVIEW_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
 
 def save_generation_record(record: dict, save_dir: Path) -> None:
     ensure_dirs()

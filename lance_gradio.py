@@ -555,7 +555,8 @@ class LanceT2VV2TPipeline:
                         )
                         return None, None, "", status
                     status = ""
-                    return str(video_path), None, "", status
+                    browser_video_path = prepare_browser_output(video_path)
+                    return str(browser_video_path), None, "", status
 
                 if internal_task in {TASK_T2I, TASK_IMAGE_EDIT}:
                     if image_path is None:
@@ -570,7 +571,8 @@ class LanceT2VV2TPipeline:
                         )
                         return None, None, "", status
                     status = ""
-                    return None, str(image_path), "", status
+                    browser_image_path = prepare_browser_output(image_path)
+                    return None, str(browser_image_path), "", status
 
                 status = ""
                 return None, None, text_result, status
@@ -864,7 +866,7 @@ if __name__ == "__main__":
         share=False,
         allowed_paths=[
             str(path.resolve())
-            for path in (*GRADIO_STATIC_MEDIA_DIRS, PREVIEW_VIDEO_DIR)
+            for path in (*GRADIO_STATIC_MEDIA_DIRS, PREVIEW_VIDEO_DIR, BROWSER_OUTPUT_DIR)
             if path.exists()
         ],
         ssr_mode=False,

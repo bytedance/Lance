@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
+from uuid import uuid4
 
 import gradio as gr
 
@@ -111,6 +112,7 @@ def ensure_dirs() -> None:
     TMP_INPUT_DIR.mkdir(parents=True, exist_ok=True)
     RESULTS_ROOT.mkdir(parents=True, exist_ok=True)
     PREVIEW_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+    BROWSER_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 def save_generation_record(record: dict, save_dir: Path) -> None:
     ensure_dirs()
@@ -692,6 +694,17 @@ def find_generated_video(save_dir: Path) -> Optional[Path]:
 def find_generated_image(save_dir: Path) -> Optional[Path]:
     images = sorted(save_dir.glob("*.png"), key=lambda p: p.stat().st_mtime, reverse=True)
     return images[0] if images else None
+
+def prepare_browser_output(source_path: Path) -> Path:
+    """Copy generated media into the dedicated browser-visible directory."""
+    source = source_path.resolve(strict=True)
+    if not source.is_file():
+        raise ValueError(f"Generated media path is not a file: {source}")
+    ensure_dirs()
+    destination = BROWSER_OUTPUT_DIR / f"{uuid4().hex}{source.suffix.lower()}"
+    shutil.copy2(source, destination)
+    return destination
+
 
 def extract_text_result(save_dir: Path) -> str:
     prompt_result_path = save_dir / PROMPT_JSON_FILENAME

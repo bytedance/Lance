@@ -12,6 +12,7 @@ GRADIO_TMP_ROOT = Path(
 TMP_INPUT_DIR = GRADIO_TMP_ROOT / "inputs"
 RESULTS_ROOT = GRADIO_TMP_ROOT / "results"
 PREVIEW_VIDEO_DIR = GRADIO_TMP_ROOT / "preview_videos"
+BROWSER_OUTPUT_DIR = GRADIO_TMP_ROOT / "browser_outputs"
 GLOBAL_RECORDS_FILE = GRADIO_TMP_ROOT / "generation_records.jsonl"
 RUN_RECORD_FILENAME = "generation_record.json"
 PROMPT_JSON_FILENAME = "prompt.json"

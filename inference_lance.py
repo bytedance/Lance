@@ -592,7 +592,10 @@ def main():
         if inference_args.task not in {TASK_T2V, TASK_I2V}:
             log_rank0("[startup] enhance_prompt is enabled but only applies to t2v and i2v; skipping prompt rewrite for this task.")
         else:
-            log_rank0(f"[startup] enhance_prompt is enabled for {inference_args.task} prompts. Configure API_KEY in common/utils/caption_rewrite.py.")
+            log_rank0(
+                f"[startup] enhance_prompt is enabled for {inference_args.task} prompts. "
+                "Configure LANCE_REWRITE_API_KEY, LANCE_REWRITE_MODEL_NAME, and LANCE_REWRITE_BASE_URL."
+            )
     val_dataset = ValidationDataset(
         jsonl_path= data_args.val_dataset_config_file,
         tokenizer=tokenizer,

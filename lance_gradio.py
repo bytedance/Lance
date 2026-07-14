@@ -28,6 +28,16 @@ def _sanitize_no_proxy_for_httpx() -> None:
             item = item.strip()
             if not item:
                 continue
+            # HTTPX URLPattern cannot parse unbracketed IPv6 CIDR entries such
+            # as "fd00::/8" or "fe80::/10" and raises InvalidURL at import
+            # time. Ignore those unsupported entries for this process.
+            if "/" in item:
+                try:
+                    network = ipaddress.ip_network(item, strict=False)
+                except ValueError:
+                    network = None
+                if network is not None and network.version == 6:
+                    continue
             if "://" not in item and item.startswith("["):
                 end = item.find("]")
                 if end > 1:
@@ -545,7 +555,8 @@ class LanceT2VV2TPipeline:
                         )
                         return None, None, "", status
                     status = ""
-                    return str(video_path), None, "", status
+                    browser_video_path = prepare_browser_output(video_path)
+                    return str(browser_video_path), None, "", status
 
                 if internal_task in {TASK_T2I, TASK_IMAGE_EDIT}:
                     if image_path is None:
@@ -560,7 +571,8 @@ class LanceT2VV2TPipeline:
                         )
                         return None, None, "", status
                     status = ""
-                    return None, str(image_path), "", status
+                    browser_image_path = prepare_browser_output(image_path)
+                    return None, str(browser_image_path), "", status
 
                 status = ""
                 return None, None, text_result, status
@@ -843,6 +855,7 @@ if __name__ == "__main__":
         flush=True,
     )
     concurrency_limit = 1
+    ensure_dirs()
     demo = build_demo(run_task)
     demo.queue(
         max_size=args.queue_size,
@@ -851,6 +864,10 @@ if __name__ == "__main__":
         server_name=args.server_name,
         server_port=args.server_port,
         share=False,
-        allowed_paths=[str(REPO_ROOT.resolve()), str(GRADIO_TMP_ROOT.resolve())],
+        allowed_paths=[
+            str(path.resolve())
+            for path in (*GRADIO_STATIC_MEDIA_DIRS, PREVIEW_VIDEO_DIR, BROWSER_OUTPUT_DIR)
+            if path.exists()
+        ],
         ssr_mode=False,
     )

@@ -307,6 +307,18 @@ class InferenceArguments(TrainingArguments):
     use_KVcache:                bool = False
     enhance_prompt:             bool = False  # Rewrite T2V prompts before inference when enabled.
 
+    # Model-parallel sharding for low-RAM hosts:
+    # 0 = use all visible GPUs (torch.cuda.device_count()).
+    # >0 = shard Lance's LLM layers across this many GPUs via accelerate.dispatch_model.
+    shard_num_gpus:             int = 0
+
+    # Spatial-tiled VAE decode for high-resolution video (see TILED_VAE_DECODE.md):
+    #   0  = auto (tile when the latent spatial size exceeds an internal threshold)
+    #   >0 = tile whenever max(latent_h, latent_w) exceeds this many latent cells
+    #   <0 = never tile (force plain decode)
+    vae_tile_size:              int = 0
+    vae_tile_overlap:           int = 8  # latent cells of overlap between adjacent tiles
+
 
 @dataclass
 class EvaluationArguments(InferenceArguments):

@@ -5,7 +5,11 @@ cd "$SCRIPT_DIR"
 source "$SCRIPT_DIR/benchmarks/sample_env.sh"
 
 # ========================= Inference Parameters =========================
-NUM_GPUS=${NUM_GPUS:-1}
+# NUM_GPUS is the number of GPUs to *shard* Lance across (model-parallel), not the
+# number of replicas. Launch always runs a single process; the Python side uses
+# accelerate.dispatch_model to split the LLM's transformer layers across NUM_GPUS
+# cards. Default matches the 5×3060 host; override if running on fewer cards.
+NUM_GPUS=${NUM_GPUS:-5}
 
 TASK_NAME=${TASK_NAME:-x2t_image} # t2i | image_edit | t2v | i2v | video_edit | x2t_image | x2t_video
 
@@ -46,6 +50,8 @@ while [[ $# -gt 0 ]]; do
         --RESOLUTION) RESOLUTION="$2"; shift 2 ;;
         --TEXT_TEMPLATE) TEXT_TEMPLATE="$2"; shift 2 ;;
         --SAVE_PATH_GEN) SAVE_PATH_GEN="$2"; shift 2 ;;
+        --VAE_TILE) VAE_TILE="$2"; shift 2 ;;
+        --VAE_TILE_OVERLAP) VAE_TILE_OVERLAP="$2"; shift 2 ;;
 
         -h|--help)
             echo "Usage: bash inference_lance_my.sh [OPTIONS]"
@@ -119,15 +125,23 @@ CONFIG_ARGS=()
 if [ -n "$CONFIG_PATH" ]; then
     CONFIG_ARGS=(--val_dataset_config_file "$CONFIG_PATH")
 fi
+# Optional: spatial-tiled VAE decode for high-res video (see TILED_VAE_DECODE.md).
+if [ -n "${VAE_TILE:-}" ]; then
+    CONFIG_ARGS+=(--vae_tile_size "$VAE_TILE")
+fi
+if [ -n "${VAE_TILE_OVERLAP:-}" ]; then
+    CONFIG_ARGS+=(--vae_tile_overlap "$VAE_TILE_OVERLAP")
+fi
 
 accelerate launch \
     --num_machines          $NUM_MACHINES \
-    --num_processes         $TOTAL_RANK \
+    --num_processes         1 \
     --machine_rank          $MACHINE_RANK \
     --main_process_ip       $MAIN_PROCESS_IP \
     --main_process_port     $MAIN_PROCESS_PORT \
     --mixed_precision       bf16 \
     inference_lance.py \
+    --shard_num_gpus        $NUM_GPUS \
     --model_path            "$MODEL_PATH" \
     --vit_type              qwen_2_5_vl_original \
     --llm_qk_norm           true \

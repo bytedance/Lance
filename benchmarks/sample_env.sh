@@ -38,6 +38,14 @@ lance_setup_common_env() {
     export CUDA_LAUNCH_BLOCKING="${CUDA_LAUNCH_BLOCKING:-0}"
     export NCCL_DEBUG="${NCCL_DEBUG:-VERSION}"
     export TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC="${TORCH_NCCL_HEARTBEAT_TIMEOUT_SEC:-900}"
+
+    # The streaming load in inference_lance.py allocates thousands of small-to-large
+    # tensors onto each GPU as it walks the checkpoint. The default caching allocator
+    # fragments under that pattern hard enough that a 1.2 GB tensor can fail to
+    # allocate on a card that still has plenty of total free VRAM. expandable_segments
+    # coalesces freed regions and lets large allocations grow into them. Required for
+    # the 5×3060 sharded load to succeed.
+    export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 }
 
 

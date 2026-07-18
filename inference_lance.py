@@ -24,13 +24,20 @@ os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 import os.path as osp
 from copy import deepcopy
 import json
-from typing import Tuple, cast, Optional
+from typing import Tuple, cast, Optional, Dict, List
 import torch
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 from transformers import HfArgumentParser, set_seed
 from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
-from safetensors.torch import load_file
+from accelerate import init_empty_weights, dispatch_model
+from common.model.sharded_load import (
+    POPPED_FROM_CHECKPOINT as _POPPED_FROM_CHECKPOINT,
+    resolve_lance_checkpoint as _resolve_lance_checkpoint,
+    build_lance_device_map as _build_lance_device_map,
+    stream_load_into as _stream_load_into,
+    materialize_remaining_meta as _materialize_remaining_meta,
+)
 
 from data.dataset_base import DataConfig, simple_custom_collate
 from data.data_utils import add_special_tokens
@@ -113,36 +120,6 @@ TASK_DEFAULT_CONFIGS = {
         "save_path_prefix": "results/x2t_video_sample",
     },
 }
-
-def init_from_model_path_if_needed(model: Qwen2ForCausalLM, model_args: ModelArguments):
-    # Always load the trained Lance checkpoint from model_path.
-    path_dir = model_args.model_path
-    ema_path = osp.join(path_dir, "ema.safetensors")
-    model_path = osp.join(path_dir, "model.safetensors")
-
-
-    model_path_ft = None
-    if osp.exists(model_path):
-        model_path_ft = model_path
-    elif osp.exists(ema_path):
-        model_path_ft = ema_path
-
-    if model_path_ft:
-        model_state_dict = load_file(model_path_ft, device="cpu")
-    else:
-        raise FileNotFoundError(
-            f"Fine-tuning failed: No valid checkpoint ('ema.safetensors' or 'model.safetensors') found in {path_dir}"
-        )
-
-    # NOTE: position embeds are fixed sinusoidal embeddings, so we can just pop it off,
-    # which makes it easier to adapt to different resolutions.
-    if 'latent_pos_embed.pos_embed' in model_state_dict:
-        model_state_dict.pop('latent_pos_embed.pos_embed')
-
-    msg = model.load_state_dict(model_state_dict, strict=False)  # strict = True | False
-    clean_memory(model_state_dict)
-
-    return msg
 
 
 def clean_memory(*objects):
@@ -265,7 +242,9 @@ def validate_on_fixed_batch(
     save_path_gt: str = "",
 ):
     val_data = val_data_cpu.cuda(device).to_dict()
-    fsdp_model = fsdp_model.to(device=device, dtype=torch.bfloat16)
+    # Do NOT call fsdp_model.to(device) here: the model is sharded across multiple GPUs
+    # via accelerate.dispatch_model, and .to() would collapse all shards onto one card.
+    # Weights are already bf16 from the streaming load.
 
     with torch.no_grad(), torch.amp.autocast("cuda", enabled=True, dtype=torch.bfloat16):
         # Compute padded_latent.
@@ -450,11 +429,19 @@ def main():
     llm_config.freeze_und = training_args.freeze_und
     llm_config.apply_qwen_2_5_vl_pos_emb = training_args.apply_qwen_2_5_vl_pos_emb
 
+    # ===== Meta-init: build the module skeleton with zero CPU RAM. =====
+    # The bare Qwen2ForCausalLM(llm_config) call used to materialize a full fp32 3B
+    # model on CPU (~12 GB), which is the load step that OOM-killed an 8 GB box.
+    # Under init_empty_weights() every nn.Parameter is created on the "meta" device
+    # (shape only, no storage), so this whole block stays at near-zero RAM.
     stage_start = time.perf_counter()
-    log_rank0(f"[startup] Initializing LLM weights: {model_args.model_path}")
-    language_model: Qwen2ForCausalLM = Qwen2ForCausalLM(llm_config)
-    log_stage("LLM weight init", stage_start)
+    log_rank0(f"[startup] Meta-initializing LLM: {model_args.model_path}")
+    with init_empty_weights():
+        language_model: Qwen2ForCausalLM = Qwen2ForCausalLM(llm_config)
+    log_stage("LLM meta-init", stage_start)
 
+    vit_model = None
+    vit_config = None
     if training_args.visual_und:
         if model_args.vit_type in ("qwen2_5_vl", "qwen_2_5_vl_original"):
             stage_start = time.perf_counter()
@@ -463,27 +450,37 @@ def main():
             log_stage("VIT config load", stage_start)
 
             stage_start = time.perf_counter()
-            log_rank0(f"[startup] Loading VIT weights: {osp.join(model_args.vit_path, 'vit.safetensors')}")
-            vit_model = Qwen2_5_VisionTransformerPretrainedModel(vit_config)
-            vit_weights = load_file(osp.join(model_args.vit_path, "vit.safetensors"))
-            vit_model.load_state_dict(vit_weights, strict=True)
-            log_stage("VIT weight load", stage_start)
+            log_rank0("[startup] Meta-initializing VIT (weights loaded later from vit.safetensors)")
+            with init_empty_weights():
+                vit_model = Qwen2_5_VisionTransformerPretrainedModel(vit_config)
+            log_stage("VIT meta-init", stage_start)
         else:
             raise ValueError(f"Unsupported vit_type: {model_args.vit_type}")
 
-        clean_memory(vit_weights)
-
     if training_args.visual_gen:
+        # WanVideoVAE itself uses torch.device("meta") + assign-load internally, so it
+        # doesn't contribute to the CPU RAM spike. Built eagerly so vae_config is real.
+        # Place it on the lightest shard (the last GPU) when sharding across >1 card:
+        # cuda:0 is the most crowded device and the video VAE decode's conv activations
+        # OOM it. On a single GPU this resolves to cuda:0 (unchanged behavior).
+        num_visible_gpus = torch.cuda.device_count()
+        shard_n = inference_args.shard_num_gpus or num_visible_gpus
+        shard_n = max(1, min(shard_n, num_visible_gpus))
+        vae_device = torch.device("cuda", shard_n - 1)
         stage_start = time.perf_counter()
-        log_rank0("[startup] Initializing VAE")
-        vae_model = WanVideoVAE()
+        log_rank0(f"[startup] Initializing VAE on {vae_device} "
+                  f"(tile_size={inference_args.vae_tile_size}, tile_overlap={inference_args.vae_tile_overlap})")
+        vae_model = WanVideoVAE(
+            device=vae_device,
+            tile_size=inference_args.vae_tile_size,
+            tile_overlap=inference_args.vae_tile_overlap,
+        )
         vae_config: AutoEncoderParams = deepcopy(vae_model.vae_config)
         log_stage("VAE init", stage_start)
     else:
         vae_model = None
         vae_config = None
 
-    # Lance configuration
     config = LanceConfig(
         visual_gen=training_args.visual_gen,
         visual_und=training_args.visual_und,
@@ -498,34 +495,85 @@ def main():
         interpolate_pos=model_args.interpolate_pos,
         timestep_shift=training_args.timestep_shift,
     )
-    model: Lance = Lance(
-        language_model=language_model,
-        vit_model=vit_model if training_args.visual_und else None,
-        vit_type=model_args.vit_type,
-        config=config,
-        training_args=training_args,
-    )
-    stage_start = time.perf_counter()
-    log_rank0(f"[startup] Moving Lance model to GPU {DEVICE}")
-    model = model.to(DEVICE)
-    log_stage("Lance model move to GPU", stage_start)
 
-    # Setup tokenizer for model:
+    stage_start = time.perf_counter()
+    log_rank0("[startup] Meta-initializing Lance wrapper")
+    with init_empty_weights():
+        model: Lance = Lance(
+            language_model=language_model,
+            vit_model=vit_model if training_args.visual_und else None,
+            vit_type=model_args.vit_type,
+            config=config,
+            training_args=training_args,
+        )
+    log_stage("Lance meta-init", stage_start)
+
+    # ===== Decide how to shard across GPUs. =====
+    num_visible_gpus = torch.cuda.device_count()
+    shard_n = inference_args.shard_num_gpus or num_visible_gpus
+    shard_n = max(1, min(shard_n, num_visible_gpus))
+    # Generation tasks decode through the VAE, whose video decode needs a near-full
+    # card to itself; reserve the last GPU for it (the VAE was built there above).
+    reserve_vae = bool(training_args.visual_gen) and inference_args.task in GENERATION_TASKS and shard_n >= 2
+    log_rank0(f"[startup] Sharding Lance across {shard_n} GPU(s) (visible: {num_visible_gpus}; "
+              f"reserve last GPU for VAE: {reserve_vae})")
+    device_map = _build_lance_device_map(model, shard_n, reserve_last_for_vae=reserve_vae)
+
+    # ===== Stream-load weights directly onto each shard's GPU at bf16. =====
+    # ViT weights live in a separate file; in the Lance wrapper they sit under vit_model.*.
+    if training_args.visual_und:
+        vit_safetensors = osp.join(model_args.vit_path, "vit.safetensors")
+        stage_start = time.perf_counter()
+        log_rank0(f"[startup] Streaming VIT weights from {vit_safetensors}")
+        vit_loaded, vit_unknown = _stream_load_into(
+            model, vit_safetensors, device_map, key_prefix="vit_model.", dtype=torch.bfloat16,
+        )
+        log_stage("VIT streaming load", stage_start,
+                  extra=f"loaded={len(vit_loaded)} unknown={len(vit_unknown)}")
+        if vit_unknown:
+            log_rank0(f"[startup] WARNING: {len(vit_unknown)} ViT key(s) had no matching param "
+                      f"(first few: {vit_unknown[:5]})")
+
+    # The main Lance checkpoint: covers language_model.*, the connector / vae<->llm /
+    # time_embedder / latent_pos_embed (popped) / etc. Skip the popped sin-cos buffer.
+    lance_ckpt = _resolve_lance_checkpoint(model_args.model_path)
+    stage_start = time.perf_counter()
+    log_rank0(f"[startup] Streaming Lance checkpoint from {lance_ckpt}")
+    main_loaded, main_unknown = _stream_load_into(
+        model, lance_ckpt, device_map, skip_keys=_POPPED_FROM_CHECKPOINT, dtype=torch.bfloat16,
+    )
+    log_stage("Lance streaming load", stage_start,
+              extra=f"loaded={len(main_loaded)} unknown={len(main_unknown)}")
+    if main_unknown:
+        # Many Lance training-time keys (optimizer state, etc.) may not exist on the
+        # inference model; informational, not fatal.
+        log_rank0(f"[startup] NOTE: {len(main_unknown)} checkpoint key(s) had no matching param "
+                  f"(first few: {main_unknown[:5]})")
+
+    # Anything still meta (the popped sin-cos pos_embed, any non-checkpointed buffer)
+    # gets allocated on its target device and re-initialized to the right values.
+    materialized = _materialize_remaining_meta(model, device_map, dtype=torch.bfloat16)
+    if materialized:
+        log_rank0(f"[startup] Materialized {len(materialized)} meta param/buffer(s) post-load "
+                  f"(first few: {materialized[:5]})")
+
+    # init_moe() copies UND weights into the moe_gen slots. For inference from a fully-
+    # trained Lance checkpoint, the moe_gen weights are already loaded above — running
+    # init_moe now would either no-op (good) or clobber them with sharded cross-device
+    # state_dict() copies (bad). Skip unconditionally on the meta-init path.
+    if training_args.copy_init_moe:
+        log_rank0("[startup] Skipping init_moe(): full checkpoint already contains moe_gen weights.")
+
+    # ===== Tokenizer + post-load patch-ups. =====
     stage_start = time.perf_counter()
     log_rank0(f"[startup] Loading tokenizer: {model_args.model_path}")
     tokenizer: Qwen2Tokenizer = Qwen2Tokenizer.from_pretrained(model_args.model_path)
-
     tokenizer, new_token_ids, num_new_tokens = add_special_tokens(tokenizer)
     log_stage("tokenizer load and special token init", stage_start, extra=f"num_new_tokens={num_new_tokens}")
 
-    # Initialize MoE before loading the checkpoint.
-    if training_args.copy_init_moe:
-        language_model.init_moe()
-
-    init_from_model_path_if_needed(model, model_args)
-
-    # Resize afterward to avoid checkpoint shape mismatches or overwritten weights.
     if num_new_tokens > 0:
+        # Embedding and lm_head are both pinned to cuda:0 in the device_map, so
+        # resize_token_embeddings can do its in-place resize without crossing devices.
         model.language_model.resize_token_embeddings(len(tokenizer))
         model.config.llm_config.vocab_size = len(tokenizer)
         model.language_model.config.vocab_size = len(tokenizer)
@@ -534,7 +582,7 @@ def main():
         from common.model.hacks import hack_qwen2_5_vl_config
         language_model = hack_qwen2_5_vl_config(language_model)
 
-    image_token_id = language_model.config.video_token_id # image_token_id # <|image_pad|>
+    image_token_id = language_model.config.video_token_id  # <|image_pad|>
     new_token_ids.update({"image_token_id": image_token_id})
     model.update_tokenizer(tokenizer=tokenizer)
 
@@ -549,7 +597,12 @@ def main():
     else:
         assert model.language_model.get_input_embeddings().weight.data.data_ptr() != model.language_model.get_output_embeddings().weight.data.data_ptr(), 'tie_word_embeddings conflict'
 
-    model = model.to(device=DEVICE, dtype=torch.bfloat16)
+    # ===== Attach cross-device hooks so activations flow between shards. =====
+    # dispatch_model walks `device_map` and installs pre/post forward hooks that move
+    # activations to the right card before each submodule runs. After this point, the
+    # model must NOT be .to()'d as that would collapse the shards.
+    if shard_n > 1:
+        model = dispatch_model(model, device_map=device_map)
     model.eval()
     if vae_model is not None and hasattr(vae_model, "eval"):
         vae_model.eval()

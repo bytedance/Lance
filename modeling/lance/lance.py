@@ -131,10 +131,140 @@ class Lance(PreTrainedModel):
 
         self.config = config
         self.training_args: TrainingArguments = kwargs.get("training_args")
+        self._relay_memory_enabled = False
+        self._relay_offload_device = torch.device("cpu")
+        self._relay_log_memory = False
 
     def update_tokenizer(self, tokenizer):
         self.tokenizer: Qwen2Tokenizer = tokenizer
         self.vocab_size_efficient = len(tokenizer)
+
+    def configure_relay_memory(self, enabled: bool, offload_device: str = "cpu", log_memory: bool = False):
+        self._relay_memory_enabled = enabled
+        self._relay_offload_device = torch.device(offload_device)
+        self._relay_log_memory = log_memory
+        self._set_relay_stream_und(False)
+
+    def _set_relay_stream_und(self, enabled: bool):
+        qwen_model = self.language_model.model
+        qwen_model._relay_stream_und = enabled
+        qwen_model._relay_offload_device = self._relay_offload_device
+        qwen_model._relay_log_memory = self._relay_log_memory
+
+    def _relay_cuda_log(self, stage_name: str, device=None):
+        if not self._relay_log_memory or not torch.cuda.is_available():
+            return
+        if device is None:
+            device = torch.cuda.current_device()
+        torch.cuda.synchronize(device)
+        allocated = torch.cuda.memory_allocated(device) / (1024 ** 3)
+        reserved = torch.cuda.memory_reserved(device) / (1024 ** 3)
+        peak = torch.cuda.max_memory_allocated(device) / (1024 ** 3)
+        self.log_rank0(f"[relay] {stage_name}: allocated={allocated:.2f}GiB reserved={reserved:.2f}GiB peak={peak:.2f}GiB")
+
+    def _relay_move_modules(self, modules, device, dtype=None):
+        seen = set()
+        for module in modules:
+            if module is None or not isinstance(module, nn.Module):
+                continue
+            module_id = id(module)
+            if module_id in seen:
+                continue
+            seen.add(module_id)
+            if dtype is None:
+                module.to(device=device)
+            else:
+                module.to(device=device, dtype=dtype)
+
+    @staticmethod
+    def _relay_named_child(module: nn.Module, name: str):
+        return getattr(module, name, None)
+
+    def _relay_und_tower_modules(self):
+        qwen_model = self.language_model.model
+        for layer in qwen_model.layers:
+            attn = layer.self_attn
+            for attr in ("q_proj", "k_proj", "v_proj", "o_proj", "q_norm", "k_norm"):
+                yield self._relay_named_child(attn, attr)
+            for attr in ("input_layernorm", "post_attention_layernorm", "mlp"):
+                yield self._relay_named_child(layer, attr)
+        yield self._relay_named_child(qwen_model, "norm")
+
+    def _relay_gen_tower_modules(self):
+        qwen_model = self.language_model.model
+        for layer in qwen_model.layers:
+            attn = layer.self_attn
+            for attr in ("q_proj_moe_gen", "k_proj_moe_gen", "v_proj_moe_gen", "o_proj_moe_gen", "q_norm_moe_gen", "k_norm_moe_gen"):
+                yield self._relay_named_child(attn, attr)
+            for attr in ("input_layernorm_moe_gen", "post_attention_layernorm_moe_gen", "mlp_moe_gen"):
+                yield self._relay_named_child(layer, attr)
+        yield self._relay_named_child(qwen_model, "norm_moe_gen")
+
+    def _relay_shared_prefill_modules(self):
+        qwen_model = self.language_model.model
+        yield self._relay_named_child(qwen_model, "embed_tokens")
+        yield self._relay_named_child(qwen_model, "rotary_emb")
+        yield self._relay_named_child(self, "time_embedder")
+        yield self._relay_named_child(self, "vae2llm")
+        yield self._relay_named_child(self, "llm2vae")
+        yield self._relay_named_child(self, "latent_pos_embed")
+
+    def _relay_shared_gen_modules(self):
+        qwen_model = self.language_model.model
+        yield self._relay_named_child(qwen_model, "rotary_emb")
+        yield self._relay_named_child(self, "time_embedder")
+        yield self._relay_named_child(self, "vae2llm")
+        yield self._relay_named_child(self, "llm2vae")
+        yield self._relay_named_child(self, "latent_pos_embed")
+
+    def relay_prepare_prefill(self, device, dtype):
+        if not self._relay_memory_enabled:
+            return
+        self._set_relay_stream_und(False)
+        self._relay_move_modules(self._relay_gen_tower_modules(), self._relay_offload_device)
+        self._relay_move_modules(self._relay_und_tower_modules(), device, dtype=dtype)
+        self._relay_move_modules(self._relay_shared_prefill_modules(), device, dtype=dtype)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        self._relay_cuda_log("prefill modules ready", device)
+
+    def relay_switch_to_gen(self, device, dtype):
+        if not self._relay_memory_enabled:
+            return
+        self._relay_move_modules(self._relay_und_tower_modules(), self._relay_offload_device)
+        self._relay_move_modules([self.language_model.model.embed_tokens, self.vit_model if hasattr(self, "vit_model") else None, self.connector if hasattr(self, "connector") else None], self._relay_offload_device)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        self._relay_cuda_log("UND tower offloaded", device)
+        self._relay_move_modules(self._relay_gen_tower_modules(), device, dtype=dtype)
+        self._relay_move_modules(self._relay_shared_gen_modules(), device, dtype=dtype)
+        self._set_relay_stream_und(True)
+        self._relay_cuda_log("GEN tower ready", device)
+
+    def relay_offload_all(self):
+        if not self._relay_memory_enabled:
+            self.to("cpu")
+            return
+        self._set_relay_stream_und(False)
+        self._relay_move_modules(self._relay_und_tower_modules(), self._relay_offload_device)
+        self._relay_move_modules(self._relay_gen_tower_modules(), self._relay_offload_device)
+        self._relay_move_modules(self._relay_shared_prefill_modules(), self._relay_offload_device)
+        self._relay_move_modules([self.language_model.lm_head], self._relay_offload_device)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+        self._relay_cuda_log("all Lance modules offloaded")
+
+    def relay_discard_all(self):
+        if not self._relay_memory_enabled:
+            self.to_empty(device=torch.device("meta"))
+            return
+        self._set_relay_stream_und(False)
+        self.to_empty(device=torch.device("meta"))
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+        self._relay_cuda_log("all Lance modules discarded")
 
     def process_attention_mask(self, current_attn_modes, current_split_lens, current_seq_len, device, BLOCK_SIZE=128):
         current_attn_modes_ = ["full" if mode_ in ["full_noise", "full_noise_target"] else mode_ for mode_ in current_attn_modes]
@@ -1393,6 +1523,7 @@ class Lance(PreTrainedModel):
         index: str = "",
         **kwargs,
     ):
+        relay_enabled = kwargs.get("memory_mode", "parallel") == "relay" and self._relay_memory_enabled
         cfg_vision_scale = cfg_vit_scale
         pt, ph, pw = self.latent_patch_size
         index_dtype = val_packed_text_ids.dtype
@@ -1432,6 +1563,9 @@ class Lance(PreTrainedModel):
 
             if gen_idx >= max_samples:
                 break
+
+            if relay_enabled:
+                self.relay_prepare_prefill(device, dtype)
 
             # 1. Get slice information for the current sample in the batch.
             sample_start_idx = cu_sample_lens[i_sample]
@@ -1614,6 +1748,8 @@ class Lance(PreTrainedModel):
 
                 current_cond_start = current_cond_end
 
+            if relay_enabled:
+                self.relay_switch_to_gen(device, dtype)
 
             for _ in range(1):
                 timestep = torch.zeros(x_t.shape[0], device=x_t.device)
